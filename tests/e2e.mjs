@@ -13,6 +13,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [videoPath, libDir, shotDir] = process.argv.slice(2);
+const cctvPath = process.env.CCTV_VIDEO; // optional: static scene with something red passing at 8-12 s
 if (!videoPath) { console.error('usage: node tests/e2e.mjs <video> [libDir] [shotDir]'); process.exit(2); }
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
@@ -59,7 +60,7 @@ const browser = await chromium.launch();
   await page.click('#analyze');
   await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
   const status = await page.textContent('#analyze-status');
-  check(/przeanalizowano 1[12] klatek/.test(status), `analysis finished: "${status}"`);
+  check(/sprawdzono 1[12] klatek/.test(status), `analysis finished: "${status}"`);
 
   await page.fill('#query', 'osoba w czerwonej czapce, która odchodzi');
   const en = await page.inputValue('#query-en');
@@ -82,6 +83,20 @@ const browser = await chromium.launch();
   check(t >= 7 && t <= 11, `clicking result seeks video (t=${t.toFixed(1)})`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, 'no horizontal scroll at phone width');
+
+  if (cctvPath) {
+    await page.setInputFiles('#file', cctvPath);
+    await page.waitForSelector('#analyze:not([disabled])');
+    await page.click('#analyze');
+    await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
+    const st = await page.textContent('#analyze-status');
+    const m = st.match(/AI obejrzało (\d+) z ruchem/);
+    check(m && +m[1] <= 8, `motion filter skips the still parts: "${st}"`);
+    await page.fill('#query', 'czerwony przechodzący człowiek');
+    await page.click('#search');
+    await page.waitForFunction(() => /0:(0[7-9]|1[0-2])/.test(document.querySelector('#results li .time')?.textContent || ''));
+    check(true, `passer-by found: ${await page.textContent('#results li .time')}`);
+  }
   await ctx.close();
 }
 

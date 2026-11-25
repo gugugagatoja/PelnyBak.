@@ -41,7 +41,7 @@ const DICT = [
   ['prowadz', 'driving'], ['rozmawia', 'talking'], ['trzyma', 'holding'], ['niesie', 'carrying'],
   ['niosac', 'carrying'], ['pcha', 'pushing'], ['macha', 'waving'], ['tanczy', 'dancing'], ['skacze', 'jumping'],
   ['pali', 'smoking'], ['je', 'eating'], ['pije', 'drinking'], ['wchodz', 'entering'], ['wychodz', 'leaving'],
-  ['przechodz', 'crossing'], ['wsiada', 'getting into'], ['wysiada', 'getting out of'],
+  ['przechodz', 'walking past'], ['wsiada', 'getting into'], ['wysiada', 'getting out of'],
   // places & scene
   ['ulic', 'street'], ['chodnik', 'sidewalk'], ['przejsci', 'crosswalk'], ['drog', 'road'], ['drzw', 'door'],
   ['sklep', 'shop'], ['parking', 'parking lot'], ['park', 'park'], ['las', 'forest'], ['lesie', 'forest'],

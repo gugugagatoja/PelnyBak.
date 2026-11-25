@@ -13,6 +13,13 @@ Aplikacja na telefon: wgrywasz filmik, opisujesz słowami, czego szukasz (np. *�
 
 Po jednej analizie filmu możesz szukać dowolnie wiele razy, a każde wyszukiwanie trwa chwilę.
 
+## Długie nagrania z kamery (np. 4 godziny)
+
+- Zostaw zaznaczone **„Pomijaj fragmenty bez ruchu”**. Program porównuje kolejne klatki i uruchamia AI tylko tam, gdzie coś się zmieniło. Przy kamerze, która stoi w miejscu, to zwykle mała część nagrania, więc analiza jest wielokrotnie szybsza.
+- Co minutę AI i tak sprawdza obraz (na wypadek zmiany światła).
+- Podczas analizy ekran się nie wygasza. Analizę można **zatrzymać** w dowolnym momencie i szukać w już sprawdzonej części.
+- Czas wyników jest w formacie godz:min:sek, np. `2:03:15`.
+
 ## Ograniczenia
 
 - Model ocenia **pojedyncze klatki**, więc dobrze rozpoznaje wygląd (kolory, ubrania, przedmioty, miejsca), a ruch („odchodzi”, „biegnie”) słabiej. Słowo „odchodzi” jest tłumaczone na „widziany od tyłu”, co zwykle pomaga.
@@ -45,4 +52,5 @@ Po jednej analizie filmu możesz szukać dowolnie wiele razy, a każde wyszukiwa
 ffmpeg -f lavfi -i color=red:s=640x360:d=4 -f lavfi -i color=blue:s=640x360:d=4 -f lavfi -i color=green:s=640x360:d=4 \
   -filter_complex "[0][1][2]concat=n=3:v=1[v]" -map "[v]" test.webm
 node tests/e2e.mjs test.webm
+# opcjonalnie nagranie „z kamery”: CCTV_VIDEO=cctv.webm node tests/e2e.mjs test.webm
 ```

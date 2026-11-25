@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   modelStatus: $('model-status'), modelProgress: $('model-progress'), modelHint: $('model-hint'),
   file: $('file'), video: $('video'), intervalRow: $('interval-row'), interval: $('interval'),
-  analyze: $('analyze'), analyzeProgress: $('analyze-progress'), analyzeStatus: $('analyze-status'),
+  analyze: $('analyze'), motionOnly: $('motion-only'), analyzeProgress: $('analyze-progress'), analyzeStatus: $('analyze-status'),
   query: $('query'), queryEn: $('query-en'), search: $('search'),
   resultsCard: $('results-card'), results: $('results'), timeline: $('timeline'),
 };
@@ -100,8 +100,9 @@ function setProgress(el, frac) {
 }
 
 const fmtTime = (t) => {
-  const m = Math.floor(t / 60), s = Math.floor(t % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+  const ss = String(s).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
 const fmtMB = (b) => `${(b / 1048576).toFixed(0)} MB`;
 
@@ -176,7 +177,7 @@ function resetResults() {
 }
 
 function updateButtons() {
-  els.analyze.disabled = state.busy || !state.videoUrl;
+  els.analyze.disabled = (state.busy && !state.analyzing) || !state.videoUrl;
   els.search.disabled = state.busy || state.frames.length === 0 || !els.queryEn.value.trim();
 }
 
@@ -194,18 +195,45 @@ els.file.addEventListener('change', () => {
     const d = els.video.duration;
     if (Number.isFinite(d)) {
       // long videos: suggest a coarser interval so analysis does not take ages on a phone
-      els.interval.value = d > 900 ? '5' : d > 300 ? '2' : '1';
+      els.interval.value = d > 300 ? '2' : '1';
       els.analyzeStatus.textContent = `Wybrano: ${file.name} (${fmtTime(d)})`;
     }
   }, { once: true });
 });
 
+// Keep the screen on during long analyses (otherwise the phone may sleep and pause the work).
+async function keepAwake() {
+  try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
+}
+
+// Tiny grayscale copy of a frame, used for cheap motion detection.
+function smallGray(ctx, video, w, h) {
+  ctx.drawImage(video, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const g = new Uint8Array(w * h);
+  for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+  return g;
+}
+function changedFraction(a, b) {
+  let n = 0;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 25) n++;
+  return n / a.length;
+}
+const MOTION_MIN_CHANGE = 0.002; // >0.2% of pixels changed = something moved (a distant person is ~0.5%)
+const MOTION_MAX_GAP = 60;       // re-check with AI at least once a minute anyway (light changes etc.)
+
 els.analyze.addEventListener('click', async () => {
+  if (state.analyzing) { state.stop = true; els.analyze.textContent = 'Zatrzymywanie…'; return; }
   if (!state.videoUrl || state.busy) return;
   state.busy = true;
+  state.analyzing = true;
+  state.stop = false;
   resetResults();
+  els.analyze.textContent = '⏹ Zatrzymaj (wyniki z dotychczasowej części zostaną)';
   updateButtons();
+  let wakeLock = null;
   try {
+    wakeLock = await keepAwake();
     await ensureModel();
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.preload = 'auto';
@@ -224,35 +252,61 @@ els.analyze.addEventListener('click', async () => {
     thumbCanvas.width = thumbW; thumbCanvas.height = thumbH;
     const tctx = thumbCanvas.getContext('2d');
     const rects = cropRects(W, H);
+    const motionOnly = els.motionOnly.checked;
+    const gw = 64, gh = Math.max(8, Math.round(64 * H / W));
+    const gctx = makeCanvas(gw, gh).getContext('2d', { willReadFrequently: true });
+    let ref = null; // last frame checked by AI: {gray, crops, thumb, t}
+    let aiCount = 0;
 
     const times = [];
     for (let t = Math.min(0.1, duration / 2); t < duration; t += interval) times.push(t);
     const started = performance.now();
-    for (let i = 0; i < times.length; i++) {
+    for (let i = 0; i < times.length && !state.stop; i++) {
       await seek(v, times[i]);
-      const crops = [];
-      for (const [sx, sy, sw, sh] of rects) {
-        cctx.drawImage(v, sx, sy, sw, sh, 0, 0, CROP, CROP);
-        crops.push(await engine.embedImage(cctx.getImageData(0, 0, CROP, CROP)));
+      const gray = motionOnly ? smallGray(gctx, v, gw, gh) : null;
+      const still = motionOnly && ref && times[i] - ref.t < MOTION_MAX_GAP && changedFraction(gray, ref.gray) < MOTION_MIN_CHANGE;
+      if (still) {
+        // nothing changed since the last AI check: the scene is the same, reuse its result
+        state.frames.push({ t: times[i], crops: ref.crops, thumb: ref.thumb, still: true });
+      } else {
+        const crops = [];
+        for (const [sx, sy, sw, sh] of rects) {
+          cctx.drawImage(v, sx, sy, sw, sh, 0, 0, CROP, CROP);
+          crops.push(await engine.embedImage(cctx.getImageData(0, 0, CROP, CROP)));
+        }
+        tctx.drawImage(v, 0, 0, thumbW, thumbH);
+        const thumb = thumbCanvas.toDataURL('image/jpeg', 0.6);
+        state.frames.push({ t: times[i], crops, thumb });
+        ref = { gray, crops, thumb, t: times[i] };
+        aiCount++;
       }
-      tctx.drawImage(v, 0, 0, thumbW, thumbH);
-      state.frames.push({ t: times[i], crops, thumb: thumbCanvas.toDataURL('image/jpeg', 0.6) });
 
       const done = i + 1;
-      const perFrame = (performance.now() - started) / done;
-      const left = Math.round(((times.length - done) * perFrame) / 1000);
-      setProgress(els.analyzeProgress, done / times.length);
-      els.analyzeStatus.textContent = `Analiza: ${done}/${times.length} klatek` + (done < times.length ? `, zostało ok. ${fmtTime(left)}` : '');
+      if (done % 5 === 0 || done === times.length) {
+        const perFrame = (performance.now() - started) / done;
+        const left = Math.round(((times.length - done) * perFrame) / 1000);
+        setProgress(els.analyzeProgress, done / times.length);
+        els.analyzeStatus.textContent = `Analiza: ${fmtTime(times[i])} z ${fmtTime(duration)}`
+          + (motionOnly ? ` · ruch w ${aiCount} z ${done} klatek` : '')
+          + (done < times.length ? ` · zostało ok. ${fmtTime(left)}` : '');
+      }
     }
     v.removeAttribute('src'); v.load();
-    els.analyzeStatus.textContent = `Gotowe: przeanalizowano ${state.frames.length} klatek. Teraz opisz, czego szukasz. Możesz szukać wiele razy.`;
+    const analysed = state.frames.length ? fmtTime(state.frames[state.frames.length - 1].t) : '0:00';
+    els.analyzeStatus.textContent = (state.stop ? `Zatrzymano na ${analysed}. ` : 'Gotowe: ')
+      + `sprawdzono ${state.frames.length} klatek`
+      + (motionOnly ? ` (AI obejrzało ${aiCount} z ruchem)` : '')
+      + '. Teraz opisz, czego szukasz. Możesz szukać wiele razy.';
     setProgress(els.analyzeProgress, null);
   } catch (e) {
     console.error(e);
     els.analyzeStatus.textContent = `Błąd: ${e.message}`;
     setProgress(els.analyzeProgress, null);
   } finally {
+    wakeLock?.release?.().catch?.(() => {});
     state.busy = false;
+    state.analyzing = false;
+    els.analyze.textContent = 'Przeanalizuj film';
     updateButtons();
   }
 });
