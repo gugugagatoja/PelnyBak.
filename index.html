@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Szukaj w filmie</title>
+  <meta name="description" content="Znajdź w filmie to, co opiszesz słowami. Działa offline na telefonie.">
+  <meta name="theme-color" content="#1f6feb">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>🔍 Szukaj w filmie</h1>
+    <p class="sub">Wgraj filmik, opisz, czego szukasz, a aplikacja pokaże momenty, które najlepiej pasują. Wszystko liczy się na Twoim telefonie.</p>
+  </header>
+
+  <main>
+    <section class="card" id="model-card">
+      <div class="row">
+        <strong>Model AI</strong>
+        <span id="model-status" class="pill">nie wczytany</span>
+      </div>
+      <div class="progress" id="model-progress" hidden><div></div></div>
+      <p class="hint" id="model-hint">Za pierwszym razem aplikacja pobierze model (ok. 90&nbsp;MB, najlepiej przez Wi-Fi). Potem działa bez internetu.</p>
+    </section>
+
+    <section class="card">
+      <h2>1. Wybierz film</h2>
+      <label class="file-btn">
+        <input type="file" id="file" accept="video/*">
+        <span>📁 Wybierz filmik</span>
+      </label>
+      <video id="video" controls playsinline muted hidden></video>
+      <div class="row" id="interval-row" hidden>
+        <label for="interval">Sprawdzaj klatkę co</label>
+        <select id="interval">
+          <option value="0.5">0,5 s (dokładniej)</option>
+          <option value="1" selected>1 s</option>
+          <option value="2">2 s (szybciej)</option>
+          <option value="5">5 s (najszybciej)</option>
+        </select>
+      </div>
+      <button id="analyze" class="primary" disabled>Przeanalizuj film</button>
+      <div class="progress" id="analyze-progress" hidden><div></div></div>
+      <p class="hint" id="analyze-status"></p>
+    </section>
+
+    <section class="card" id="search-card">
+      <h2>2. Opisz, czego szukasz</h2>
+      <textarea id="query" rows="2" placeholder="np. osoba w czerwonej czapce, która odchodzi"></textarea>
+      <label class="small" for="query-en">Zapytanie dla AI (po angielsku, możesz poprawić):</label>
+      <input id="query-en" type="text" autocomplete="off" spellcheck="false" placeholder="np. person in a red hat walking away">
+      <button id="search" class="primary" disabled>Szukaj</button>
+      <p class="hint">Najlepiej działają opisy wyglądu: kolory, ubrania, przedmioty, miejsca. Ruch („odchodzi”, „biegnie”) AI rozpoznaje tylko z pojedynczych klatek, więc mniej pewnie.</p>
+    </section>
+
+    <section class="card" id="results-card" hidden>
+      <h2>Wyniki</h2>
+      <canvas id="timeline" height="60" aria-label="Wykres dopasowania w czasie"></canvas>
+      <p class="hint">Wykres pokazuje, jak bardzo każdy moment pasuje do opisu. Dotknij go, aby przewinąć film.</p>
+      <ol id="results"></ol>
+    </section>
+  </main>
+
+  <footer>
+    <p>Model: CLIP (OpenAI), uruchamiany lokalnie przez Transformers.js.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
