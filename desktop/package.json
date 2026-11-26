@@ -1,0 +1,37 @@
+{
+  "name": "szukaj-w-filmie",
+  "productName": "Szukaj w filmie",
+  "version": "1.0.0",
+  "description": "Znajdź w filmie to, co opiszesz słowami. Działa offline.",
+  "main": "main.js",
+  "private": true,
+  "author": "gugugagatoja",
+  "scripts": {
+    "prepare-app": "bash ../scripts/prepare-offline.sh",
+    "start": "electron .",
+    "dist:win": "electron-builder --win zip --x64"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "3.7.6",
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "playwright": "1.49.1"
+  },
+  "build": {
+    "appId": "io.github.gugugagatoja.szukajwfilmie",
+    "productName": "Szukaj w filmie",
+    "artifactName": "Szukaj-w-filmie-Windows.${ext}",
+    "asar": false,
+    "files": [
+      "main.js",
+      "app/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "app/icons/icon-512.png"
+    }
+  }
+}

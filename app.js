@@ -10,10 +10,12 @@ const els = {
 };
 
 const CROP = 224; // CLIP input size
+// Desktop (.exe) version, or ?local for tests: model and AI runtime ship with the app, nothing is downloaded.
+const LOCAL = location.protocol === 'app:' || new URLSearchParams(location.search).has('local');
 
 // ---------- PWA / offline ----------
 async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
+  if (LOCAL || !('serviceWorker' in navigator)) return;
   try {
     await navigator.serviceWorker.register('sw.js');
     await navigator.serviceWorker.ready;
@@ -64,7 +66,7 @@ function createWorkerEngine() {
     load(progressCb) {
       if (progressCb) onProgress = progressCb;
       if (!readyPromise) {
-        readyPromise = call({ type: 'load' });
+        readyPromise = call({ type: 'load', local: LOCAL });
         readyPromise.catch(() => { readyPromise = null; });
       }
       return readyPromise;
@@ -118,7 +120,9 @@ async function ensureModel() {
     });
   } catch (e) {
     els.modelStatus.textContent = 'błąd';
-    els.modelHint.textContent = `Nie udało się wczytać modelu (${e.message}). Za pierwszym razem potrzebny jest internet.`;
+    els.modelHint.textContent = `Nie udało się wczytać modelu (${e.message}). ` + (LOCAL
+      ? 'Brakuje plików modelu w folderze programu. Pobierz i rozpakuj program jeszcze raz.'
+      : 'Za pierwszym razem potrzebny jest internet.');
     setProgress(els.modelProgress, null);
     throw e;
   }
@@ -126,7 +130,9 @@ async function ensureModel() {
   setProgress(els.modelProgress, null);
   els.modelStatus.textContent = 'gotowy (offline)';
   els.modelStatus.classList.add('ok');
-  els.modelHint.textContent = 'Model jest zapisany na telefonie. Aplikacja działa bez internetu.';
+  els.modelHint.textContent = LOCAL
+    ? 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.'
+    : 'Model jest zapisany na tym urządzeniu. Aplikacja działa bez internetu.';
 }
 
 async function modelIsCached() {
@@ -482,5 +488,8 @@ els.timeline.addEventListener('click', (e) => {
 // ---------- start ----------
 (async () => {
   await registerServiceWorker();
-  if (await modelIsCached()) ensureModel().catch(() => {});
+  if (LOCAL) {
+    els.modelHint.textContent = 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.';
+    ensureModel().catch(() => {});
+  } else if (await modelIsCached()) ensureModel().catch(() => {});
 })();

@@ -1,0 +1,65 @@
+// Smoke test of the desktop (Electron) app with Playwright.
+// Usage: node tests/electron-smoke.mjs <test-video> [--expect-model] [--screenshot file.png]
+// Run from the repo root after scripts/prepare-offline.sh. On Linux CI wrap with xvfb-run.
+//  - always: window opens, app loads over app://, AI library loads from vendor/, internet is blocked
+//  - with --expect-model: the real CLIP model loads, analyses the video and finds the red part
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(path.join(root, 'desktop', 'package.json'));
+const { _electron: electron } = require('playwright');
+const args = process.argv.slice(2);
+const video = args[0];
+const expectModel = args.includes('--expect-model');
+const shot = args.includes('--screenshot') ? args[args.indexOf('--screenshot') + 1] : null;
+
+let failures = 0;
+const check = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
+
+const app = await electron.launch({
+  args: [path.join(root, 'desktop'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
+});
+const page = await app.firstWindow();
+page.on('console', (m) => { if (m.type() === 'error') console.log('  console:', m.text()); });
+page.on('pageerror', (e) => { console.log('pageerror', e.message); failures++; });
+await page.waitForLoadState('domcontentloaded');
+check((await page.title()) === 'Szukaj w filmie', 'window shows the app');
+
+const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true));
+check(blocked, 'internet access is blocked inside the app');
+check(await page.evaluate(() => crossOriginIsolated), 'multi-threaded AI available (cross-origin isolated)');
+
+await page.waitForFunction(() => /błąd|gotowy/.test(document.getElementById('model-status').textContent), null, { timeout: 180000 });
+const status = await page.textContent('#model-status');
+const hint = await page.textContent('#model-hint');
+console.log(`  model: ${status} | ${hint}`);
+
+if (expectModel) {
+  check(status.includes('gotowy'), 'real CLIP model loaded from the app folder');
+  await page.setInputFiles('#file', video);
+  await page.waitForSelector('#analyze:not([disabled])');
+  const t0 = Date.now();
+  await page.click('#analyze');
+  await page.waitForFunction(() => /^(Gotowe|Błąd)/.test(document.getElementById('analyze-status').textContent), null, { timeout: 600000 });
+  const st = await page.textContent('#analyze-status');
+  check(st.startsWith('Gotowe'), `analysis: "${st}" in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  for (const [q, re] of [['czerwony', /^▶ 0:0[0-4]/], ['zielony', /^▶ 0:(0[7-9]|1[01])/]]) {
+    await page.fill('#query', q);
+    await page.click('#search');
+    await page.waitForSelector('#results li .time');
+    await page.waitForTimeout(300);
+    const first = (await page.textContent('#results li .time')).trim();
+    const score = await page.textContent('#results li .score');
+    check(re.test(first), `real AI: "${q}" -> ${first} (${score.trim()})`);
+  }
+} else {
+  check(!/import|module|Failed to fetch dynamically/i.test(hint), 'AI library loaded from the app folder');
+  check(/models\/Xenova|local|404|Could not locate/i.test(hint) || status.includes('gotowy'),
+    'model is looked up inside the app folder (not on the internet)');
+}
+if (shot) await page.screenshot({ path: shot });
+await app.close();
+console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
+process.exit(failures ? 1 : 0);

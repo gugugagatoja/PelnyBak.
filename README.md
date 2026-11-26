@@ -26,13 +26,23 @@ Po jednej analizie filmu możesz szukać dowolnie wiele razy, a każde wyszukiwa
 - Polski słownik jest prosty. Jeśli tłumaczenie wyjdzie dziwne, popraw pole „Zapytanie dla AI”: angielski działa najlepiej.
 - Analiza długich filmów na telefonie trwa: zwykle 0,3–1 s na klatkę. Dla długich nagrań wybierz rzadsze klatki (2–5 s).
 
-## Instalacja na telefonie (Android)
+## Instalacja na telefonie (Android) i w przeglądarce
 
-1. Włącz GitHub Pages: w repozytorium **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Uruchom (lub poczekaj na) workflow **Publikacja na GitHub Pages** w zakładce **Actions**.
-3. Otwórz adres strony w Chrome na telefonie, np. `https://gugugagatoja.github.io/PelnyBak./`.
-4. Menu ⋮ → **Dodaj do ekranu głównego** / **Zainstaluj aplikację**.
-5. Za pierwszym razem, przy Wi-Fi, przeanalizuj dowolny film, żeby model się pobrał. Potem aplikacja działa offline.
+1. Otwórz w Chrome: **https://gugugagatoja.github.io/PelnyBak./**
+2. Menu ⋮ → **Zainstaluj aplikację** (na komputerze: ikonka instalacji w pasku adresu).
+3. Za pierwszym razem, przy Wi-Fi, przeanalizuj dowolny film, żeby pobrał się model AI. Potem aplikacja działa offline.
+
+Strona jest publikowana z tej gałęzi (Settings → Pages → Deploy from a branch).
+
+## Program dla Windows (offline, z pendrive'a)
+
+Program z wbudowanym modelem AI. Nie trzeba go instalować ani łączyć z internetem.
+
+1. Pobierz **Szukaj-w-filmie-Windows.zip** z zakładki **Releases** (wydanie „program-windows”).
+2. Rozpakuj go w dowolnym miejscu, np. na pendrive.
+3. Uruchom **Szukaj w filmie.exe**. Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij **Więcej informacji → Uruchom mimo to**.
+
+Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać wysłane. Plik ZIP buduje automatycznie workflow **Program dla Windows**, który przed budową testuje aplikację z prawdziwym modelem AI.
 
 ## Pliki
 
@@ -43,7 +53,10 @@ Po jednej analizie filmu możesz szukać dowolnie wiele razy, a każde wyszukiwa
 | `worker.js` | Model AI (CLIP przez Transformers.js) w osobnym wątku |
 | `translate.js` | Słownik polsko-angielski do opisów |
 | `sw.js`, `manifest.webmanifest` | Instalacja i praca offline (PWA) |
+| `desktop/` | Program dla Windows (Electron) |
+| `scripts/prepare-offline.sh` | Przygotowuje aplikację z modelem do wersji offline |
 | `tests/e2e.mjs` | Test w przeglądarce (Playwright) |
+| `tests/electron-smoke.mjs` | Test programu dla Windows |
 
 ## Test
 

@@ -2,3 +2,6 @@ node_modules/
 *.webm
 *.mp4
 szukaj-w-filmie.zip
+desktop/node_modules/
+desktop/app/
+desktop/dist/
