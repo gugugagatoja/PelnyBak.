@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the portable Windows program in two versions (one folder "Szukaj w filmie" inside each):
 #   desktop/dist/Szukaj-w-filmie-Windows-pelny.zip  - all AI models from models.js
-#   desktop/dist/Szukaj-w-filmie-Windows-lekki.zip  - only the fast model
+#   desktop/dist/Szukaj-w-filmie-Windows-lekki.zip  - only the fast model (+ the translator)
 # Run after scripts/prepare-offline.sh (with all models). Works on Linux.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,10 +26,10 @@ TXT
 sed -i 's/$/\r/' "Szukaj w filmie/CZYTAJ MNIE.txt"   # Windows line endings for Notepad
 zip -qr -9 Szukaj-w-filmie-Windows-pelny.zip "Szukaj w filmie"
 # lite version: drop every model except the fast one
-KEEP="$(node --input-type=module -e "const { MODELS } = await import('$ROOT/models.js'); console.log(MODELS.fast.id)")"
+KEEP="$(node --input-type=module -e "const { MODELS, TRANSLATOR } = await import('$ROOT/models.js'); console.log(MODELS.fast.id + ' ' + TRANSLATOR.id)")"
 MODELS_DIR="Szukaj w filmie/resources/app/app/models"
 find "$MODELS_DIR" -mindepth 2 -maxdepth 2 -type d | while read -r d; do
-  [ "${d#$MODELS_DIR/}" = "$KEEP" ] || rm -rf "$d"
+  case " $KEEP " in *" ${d#$MODELS_DIR/} "*) ;; *) rm -rf "$d" ;; esac
 done
 find "$MODELS_DIR" -mindepth 1 -type d -empty -delete
 zip -qr -9 Szukaj-w-filmie-Windows-lekki.zip "Szukaj w filmie"

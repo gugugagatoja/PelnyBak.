@@ -17,3 +17,7 @@ export const MODELS = {
   },
 };
 export const DEFAULT_MODEL = 'fast';
+
+// Offline Polish -> English translation for words the dictionary does not know
+// (chosen by scripts/translate-check.mjs: small, fast, good on single words).
+export const TRANSLATOR = { id: 'Xenova/opus-mt-pl-en', dtype: 'q8', sizeMB: 110 };

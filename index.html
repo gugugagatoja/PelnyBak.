@@ -75,7 +75,11 @@
     <section class="card" id="search-card">
       <h2>2. Opisz, czego szukasz</h2>
       <textarea id="query" rows="2" placeholder="np. osoba w czerwonej czapce, która odchodzi"></textarea>
-      <p class="warn" id="query-unknown" hidden></p>
+      <div class="warn" id="query-unknown" hidden>
+        <p id="query-unknown-text"></p>
+        <button type="button" id="translate-ai" hidden>Przetłumacz przez AI</button>
+      </div>
+      <p class="hint ai-note" id="query-ai" hidden></p>
       <label class="small" for="query-en">Zapytanie dla AI (po angielsku, możesz poprawić):</label>
       <input id="query-en" type="text" autocomplete="off" spellcheck="false" placeholder="np. person in a red hat walking away">
       <button id="search" class="primary" disabled>Szukaj</button>

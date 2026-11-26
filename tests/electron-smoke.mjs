@@ -64,6 +64,10 @@ if (expectModel) {
   await page.waitForFunction(() => /^(Gotowe|Błąd)/.test(document.getElementById('analyze-status').textContent), null, { timeout: 600000 });
   const st = await page.textContent('#analyze-status');
   check(st.startsWith('Gotowe'), `analysis: "${st}" in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  await page.fill('#query', 'pomidor');
+  await page.waitForFunction(() => /tomato/i.test(document.getElementById('query-en').value), null, { timeout: 120000 })
+    .then(async () => check(true, `offline AI translator: pomidor -> ${await page.inputValue('#query-en')}`),
+          async () => check(false, `offline AI translator: pomidor -> ${await page.inputValue('#query-en')} | ${await page.textContent('#query-unknown')}`));
   for (const [q, re] of [['czerwony', /^▶ 0:0[0-4]/], ['zielony', /^▶ 0:(0[7-9]|1[01])/]]) {
     await page.fill('#query', q);
     await page.click('#search');

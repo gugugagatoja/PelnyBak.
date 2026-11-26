@@ -94,8 +94,9 @@ for (const [pl, en] of DICT) {
 }
 stems.sort((a, b) => b[0].length - a[0].length); // longest stem wins
 
-function translateWord(word) {
+function translateWord(word, extra) {
   const w = strip(word);
+  if (extra?.has(w)) return extra.get(w);
   if (exact.has(w)) return exact.get(w);
   for (const [stem, en] of stems) if (w.startsWith(stem)) return en;
   return word; // unknown: keep (may already be English)
@@ -103,24 +104,25 @@ function translateWord(word) {
 
 // words the dictionary does not know and that are not plain English either (probably Polish)
 const ENGLISH = new Set(DICT.flatMap(([, en]) => en.toLowerCase().split(/[\s,-]+/)).filter(Boolean));
-export function unknownWords(text) {
+export const wordKey = strip;
+export function unknownWords(text, extra) {
   const out = [];
   for (const token of text.split(/[\s,.;:!?()]+/)) {
     if (!token || /^\d+$/.test(token)) continue;
     const w = strip(token);
-    if (exact.has(w) || stems.some(([stem]) => w.startsWith(stem)) || ENGLISH.has(token.toLowerCase())) continue;
+    if (extra?.has(w) || exact.has(w) || stems.some(([stem]) => w.startsWith(stem)) || ENGLISH.has(token.toLowerCase())) continue;
     if (!out.includes(token)) out.push(token);
   }
   return out;
 }
 
-export function translatePlToEn(text) {
+export function translatePlToEn(text, extra) {
   const out = [];
   for (const token of text.split(/(\s+|[,.;:!?()]+)/)) {
     if (!token) continue;
     if (/^\s+$/.test(token)) { out.push(' '); continue; }
     if (/^[,.;:!?()]+$/.test(token)) { out.push(token); continue; }
-    const en = translateWord(token);
+    const en = translateWord(token, extra);
     out.push(en || null); // null = dropped word
   }
   // a preposition directly before a dropped word ("w [tym] [miejscu]") is dropped too

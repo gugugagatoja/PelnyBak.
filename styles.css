@@ -129,3 +129,6 @@ video { width: 100%; max-height: 50vh; margin-top: 12px; border-radius: 10px; ba
 @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
 .warn { margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.85rem;
   background: color-mix(in srgb, #e8912d 15%, transparent); border: 1px solid #e8912d; }
+.warn p { margin: 0; }
+.warn button { margin-top: 8px; width: 100%; }
+.ai-note { margin: 0 0 8px; }

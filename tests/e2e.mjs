@@ -39,6 +39,10 @@ const browser = await chromium.launch();
   await ctx.addInitScript(() => {
     const COLORS = { red: [1, 0, 0], green: [0, 1, 0], blue: [0, 0, 1] };
     const norm = (v) => { const n = Math.hypot(...v) || 1; return Float32Array.from(v, (x) => x / n); };
+    window.__createTestTranslator = () => ({
+      translate: async (words) => words.map((w) => ({ pomidor: 'tomato', 'grzebień': 'comb' })[w.toLowerCase()] || w),
+    });
+    try { localStorage.setItem('translatorOK', '1'); } catch {}
     window.__createTestEngine = () => ({
       load: async (cb) => { cb?.(1, 1); },
       embedImage: async (img) => {
@@ -67,8 +71,14 @@ const browser = await chromium.launch();
   await page.fill('#query', 'klucze i portfel');
   check(await page.inputValue('#query-en') === 'keys and wallet', `translation of "klucze i portfel": ${await page.inputValue('#query-en')}`);
   check(!(await page.isVisible('#query-unknown')), 'no warning when all words are known');
-  await page.fill('#query', 'zielony grzebień');
-  check(await page.isVisible('#query-unknown') && (await page.textContent('#query-unknown')).includes('grzebień'), 'warning names an unknown word');
+  await page.fill('#query', 'czerwony pomidor');
+  await page.waitForFunction(() => document.getElementById('query-en').value === 'red tomato', null, { timeout: 5000 })
+    .then(() => check(true, 'unknown word translated by the AI translator (pomidor -> tomato)'),
+          async () => check(false, `AI translation: ${await page.inputValue('#query-en')}`));
+  check((await page.textContent('#query-ai')).includes('pomidor → tomato'), 'shows which words the AI translated');
+  await page.fill('#query', 'zielony xyzabc');
+  await page.waitForFunction(() => !document.getElementById('query-unknown').hidden, null, { timeout: 5000 }).catch(() => {});
+  check(await page.isVisible('#query-unknown') && (await page.textContent('#query-unknown')).includes('xyzabc'), 'warning names a word nobody could translate');
   await page.fill('#query', 'red car');
   check(!(await page.isVisible('#query-unknown')), 'no warning for English descriptions');
   await page.fill('#query', 'osoba w czerwonej czapce, która odchodzi');

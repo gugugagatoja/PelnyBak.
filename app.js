@@ -1,5 +1,5 @@
-import { translatePlToEn, unknownWords } from './translate.js';
-import { MODELS, DEFAULT_MODEL } from './models.js';
+import { translatePlToEn, unknownWords, wordKey } from './translate.js';
+import { MODELS, DEFAULT_MODEL, TRANSLATOR } from './models.js';
 import { APP_VERSION } from './version.js';
 
 document.getElementById('app-version').textContent = `v${APP_VERSION}`;
@@ -668,13 +668,91 @@ function makeCanvas(w, h) {
 }
 
 // ---------- search ----------
-els.query.addEventListener('input', () => {
-  els.queryEn.value = translatePlToEn(els.query.value);
-  const unknown = unknownWords(els.query.value);
-  const warn = document.getElementById('query-unknown');
-  warn.hidden = unknown.length === 0;
-  warn.textContent = `Nie znam słów: ${unknown.join(', ')}. AI rozumie tylko angielski. Jeśli to polskie słowa, wpisz je po angielsku w polu poniżej.`;
+// ---------- translation of the description ----------
+// 1) built-in dictionary (reliable for known words), 2) an offline AI translator only for the words
+// the dictionary does not know. AI translations are remembered for this session.
+const aiWords = new Map(); // dictionary key -> English
+function createTranslator() {
+  let worker = null, nextId = 1;
+  const pending = new Map();
+  let onProgress = () => {};
+  return {
+    translate(words, progress) {
+      if (progress) onProgress = progress;
+      if (!worker) {
+        worker = new Worker(new URL('./translate-worker.js', import.meta.url), { type: 'module' });
+        worker.onmessage = ({ data }) => {
+          if (data.type === 'progress') return onProgress(data.loaded, data.total);
+          const p = pending.get(data.id); if (!p) return;
+          pending.delete(data.id);
+          data.type === 'error' ? p.reject(new Error(data.message)) : p.resolve(data.out);
+        };
+        worker.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(e.message || 'Błąd tłumacza')); pending.clear(); worker = null; };
+      }
+      return new Promise((resolve, reject) => {
+        const id = nextId++;
+        pending.set(id, { resolve, reject });
+        worker.postMessage({ type: 'translate', id, words, local: LOCAL, model: TRANSLATOR });
+      });
+    },
+  };
+}
+const translator = (window.__createTestTranslator || createTranslator)();
+
+async function translatorReady() {
+  if (LOCAL) return true;
+  try { if (localStorage.getItem('translatorOK') === '1') return true; } catch {}
+  try {
+    const keys = await (await caches.open('transformers-cache')).keys();
+    return keys.some((r) => r.url.includes(`/${TRANSLATOR.id}/`));
+  } catch { return false; }
+}
+
+const qEls = { box: $('query-unknown'), text: $('query-unknown-text'), btn: $('translate-ai'), ai: $('query-ai') };
+let queryRun = 0;
+async function updateQuery(allowDownload = false) {
+  const run = ++queryRun;
+  const text = els.query.value;
+  let unknown = unknownWords(text, aiWords);
+  if (unknown.length && (allowDownload || await translatorReady())) {
+    if (run !== queryRun) return;
+    qEls.box.hidden = false; qEls.btn.hidden = true;
+    qEls.text.textContent = `Tłumaczę przez AI: ${unknown.join(', ')}…`;
+    try {
+      const out = await translator.translate(unknown, (loaded, total) => {
+        if (run === queryRun) qEls.text.textContent = `Pobieram tłumacza AI (raz): ${fmtMB(loaded)} z ${fmtMB(total)}…`;
+      });
+      try { localStorage.setItem('translatorOK', '1'); } catch {}
+      // an output equal to the input means the translator did not know the word either
+      unknown.forEach((w, i) => { if (out[i] && wordKey(out[i]) !== wordKey(w)) aiWords.set(wordKey(w), out[i]); });
+    } catch (e) {
+      console.warn('Translator failed:', e);
+    }
+    if (run !== queryRun) return;
+    unknown = unknownWords(text, aiWords);
+  }
+  if (run !== queryRun) return;
+  els.queryEn.value = translatePlToEn(text, aiWords);
+  // which words did the AI translate (so the user can check them)
+  const fromAi = [...new Set(text.split(/[\s,.;:!?()]+/).filter((w) => w && aiWords.has(wordKey(w)) && unknownWords(w).length > 0))]
+    .map((w) => `${w} → ${aiWords.get(wordKey(w))}`);
+  qEls.ai.hidden = fromAi.length === 0;
+  qEls.ai.textContent = `AI przetłumaczyło: ${fromAi.join(', ')}. Jeśli to złe tłumaczenie, popraw je w polu poniżej.`;
+  qEls.box.hidden = unknown.length === 0;
+  qEls.btn.hidden = LOCAL;
+  qEls.btn.textContent = `Przetłumacz przez AI (pobierze raz ok. ${TRANSLATOR.sizeMB} MB)`;
+  qEls.text.textContent = `Nie znam słów: ${unknown.join(', ')}. AI rozumie tylko angielski.`
+    + (LOCAL ? ' Wpisz je po angielsku w polu poniżej.' : ' Kliknij przycisk albo wpisz je po angielsku w polu poniżej.');
   updateButtons();
+}
+qEls.btn.addEventListener('click', () => updateQuery(true));
+let queryTimer = null;
+els.query.addEventListener('input', () => {
+  els.queryEn.value = translatePlToEn(els.query.value, aiWords); // instant dictionary result
+  if (unknownWords(els.query.value, aiWords).length === 0) { qEls.box.hidden = true; qEls.ai.hidden = true; }
+  updateButtons();
+  clearTimeout(queryTimer);
+  queryTimer = setTimeout(() => updateQuery(), 400);
 });
 els.queryEn.addEventListener('input', updateButtons);
 els.query.addEventListener('keydown', (e) => {

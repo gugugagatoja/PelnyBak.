@@ -45,6 +45,14 @@ await page.waitForSelector('#results li .time');
 const first = (await page.textContent('#results li .time')).trim();
 check(/^▶ 0:0[0-4]/.test(first), `"czerwony" -> ${first}`);
 
+// unknown word: the user confirms the one-time download of the AI translator
+await page.fill('#query', 'pomidor');
+await page.waitForSelector('#translate-ai:not([hidden])', { timeout: 10000 });
+await page.click('#translate-ai');
+await page.waitForFunction(() => /tomato/i.test(document.getElementById('query-en').value), null, { timeout: 180000 })
+  .then(async () => check(true, `AI translator in the browser: pomidor -> ${await page.inputValue('#query-en')}`),
+        async () => check(false, `AI translator in the browser: ${await page.inputValue('#query-en')} | ${await page.textContent('#query-unknown')}`));
+
 // second visit: model must come from the browser cache, with the internet cut off
 await page.reload();
 await ctx.setOffline(true);
