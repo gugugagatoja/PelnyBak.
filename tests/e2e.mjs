@@ -81,6 +81,12 @@ const browser = await chromium.launch();
   await page.click('#results li');
   const t = await page.evaluate(() => document.getElementById('video').currentTime);
   check(t >= 7 && t <= 11, `clicking result seeks video (t=${t.toFixed(1)})`);
+  // the phone may drop the player's decoder after a long analysis: simulate it, the click must still play
+  await page.evaluate(() => { const v = document.getElementById('video'); v.removeAttribute('src'); v.load(); });
+  await page.click('#results li');
+  await page.waitForFunction(() => document.getElementById('video').currentTime > 7, null, { timeout: 15000 })
+    .then(() => check(true, 'result click recovers a released video player'),
+          () => check(false, 'result click recovers a released video player'));
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, 'no horizontal scroll at phone width');
 

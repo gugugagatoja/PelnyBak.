@@ -676,10 +676,32 @@ function renderResults(moments) {
   }
 }
 
-function playFrom(t) {
-  els.video.currentTime = t;
-  els.video.play().catch(() => {});
-  els.video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+// Jump to a moment and play. After a long analysis (especially with the bigger model) a phone may
+// have released the player's video decoder; then the video is reloaded and we try again.
+async function playFrom(t) {
+  const v = els.video;
+  v.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const reload = async () => {
+    v.src = state.videoUrl;
+    v.load();
+    await waitFor(v, 'loadeddata');
+  };
+  const attempt = async () => {
+    if (v.error || v.readyState < 2) await reload();
+    v.currentTime = t;
+    await waitFor(v, 'seeked', 5000);
+    await v.play();
+  };
+  try {
+    await attempt();
+  } catch {
+    try {
+      await reload();
+      await attempt();
+    } catch (e) {
+      els.analyzeStatus.textContent = `Nie udało się uruchomić filmu (${e.message}). Przewiń go ręcznie do ${fmtTime(t)}.`;
+    }
+  }
 }
 
 function drawTimeline(moments) {
