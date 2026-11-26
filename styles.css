@@ -21,6 +21,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -116,3 +117,7 @@ video { width: 100%; max-height: 50vh; margin-top: 12px; border-radius: 10px; ba
 .metrics:empty { display: none; }
 .metrics b { color: var(--text); font-weight: 600; }
 .metrics .hot { color: #d1242f; }
+.clip-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 10px 0 0; padding: 10px 12px;
+  border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid var(--accent); }
+.clip-bar span { flex: 1 1 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.clip-bar button { flex: 1 1 auto; }

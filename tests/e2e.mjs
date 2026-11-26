@@ -81,6 +81,21 @@ const browser = await chromium.launch();
   await page.click('#results li');
   const t = await page.evaluate(() => document.getElementById('video').currentTime);
   check(t >= 7 && t <= 11, `clicking result seeks video (t=${t.toFixed(1)})`);
+  // clip mode: the green result (0:08-0:11) plays only its window, then stops at its start
+  check(await page.isVisible('#clip-bar'), `clip bar shown: "${(await page.textContent('#clip-label')).slice(0, 60)}…"`);
+  await page.waitForFunction(() => { const v = document.getElementById('video'); return v.paused && v.currentTime > 7 && v.currentTime < 8.5; },
+    null, { timeout: 20000 })
+    .then(() => check(true, 'clip stops at its end and goes back to its start'),
+          async () => check(false, `clip end: t=${await page.evaluate(() => document.getElementById('video').currentTime)}`));
+  await page.evaluate(() => document.getElementById('video').play());
+  await page.waitForTimeout(700);
+  const replay = await page.evaluate(() => ({ t: document.getElementById('video').currentTime, paused: document.getElementById('video').paused }));
+  check(!replay.paused && replay.t > 7 && replay.t < 10, `play replays the same window (t=${replay.t.toFixed(1)})`);
+  await page.click('#clip-exit');
+  check(!(await page.isVisible('#clip-bar')), '"Cały film" leaves clip mode');
+  await page.evaluate(() => document.getElementById('video').pause());
+  await page.click('#results li');
+
   // the phone may drop the player's decoder after a long analysis: simulate it, the click must still play
   await page.evaluate(() => { const v = document.getElementById('video'); v.removeAttribute('src'); v.load(); });
   await page.click('#results li');

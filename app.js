@@ -329,6 +329,7 @@ els.file.addEventListener('change', () => {
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.videoUrl = URL.createObjectURL(file);
   els.video.src = state.videoUrl;
+  setClip(null);
   els.videoWrap.hidden = false;
   els.roiRow.hidden = false;
   els.intervalRow.hidden = false;
@@ -389,6 +390,7 @@ els.analyze.addEventListener('click', async () => {
   state.analyzing = true;
   state.stop = false;
   resetResults();
+  setClip(null);
   if (roiEditing) setRoiEditing(false);
   els.analyze.textContent = '⏹ Zatrzymaj (wyniki z dotychczasowej części zostaną)';
   updateButtons();
@@ -714,10 +716,56 @@ function renderResults(moments) {
       <div class="score">dopasowanie ${Math.round(m.match * 100)}% · pewność ${confidence(m.raw)}</div>
       <div class="bar"><div style="width:${Math.round(m.match * 100)}%"></div></div>`;
     li.append(img, info);
-    li.addEventListener('click', () => playFrom(Math.max(0, tFrom - 0.5)));
+    // play only the found time window (+ a little margin); a frame stands for the time until the next one
+    li.addEventListener('click', () => playClip(Math.max(0, tFrom - 0.5), tTo + state.interval + 0.5));
     els.results.append(li);
   }
 }
+
+// ---------- clip mode: play only the found time window ----------
+// state.clip = {from, to} while a result's window is being played; at its end the video stops and
+// goes back to the start of the window, so pressing play shows the same window again.
+state.clip = null;
+let internalSeek = false; // true while the app itself moves the video (not the user)
+const clipEls = { bar: document.getElementById('clip-bar'), label: document.getElementById('clip-label'),
+  replay: document.getElementById('clip-replay'), exit: document.getElementById('clip-exit') };
+
+function setClip(clip) {
+  state.clip = clip;
+  clipEls.bar.hidden = !clip;
+  if (clip) clipEls.label.textContent = `Odtwarzam tylko znaleziony fragment ${fmtTime(clip.from)}–${fmtTime(clip.to)}. Na końcu film się zatrzyma, ▶ odtworzy go jeszcze raz.`;
+}
+function clipEnded() {
+  const v = els.video;
+  v.pause();
+  internalSeek = true;
+  v.currentTime = state.clip.from;
+}
+function playClip(from, to) {
+  const d = els.video.duration;
+  setClip({ from, to: Number.isFinite(d) ? Math.min(to, d) : to });
+  playFrom(from);
+}
+els.video.addEventListener('timeupdate', () => {
+  if (state.clip && !state.analyzing && els.video.currentTime >= state.clip.to - 0.05) clipEnded();
+});
+els.video.addEventListener('ended', () => { if (state.clip && !state.analyzing) clipEnded(); });
+els.video.addEventListener('play', () => {
+  const c = state.clip, v = els.video;
+  if (c && !state.analyzing && (v.currentTime < c.from - 0.3 || v.currentTime >= c.to - 0.1)) {
+    internalSeek = true;
+    v.currentTime = c.from;
+  }
+});
+els.video.addEventListener('seeking', () => {
+  if (internalSeek || state.analyzing || !state.clip) return;
+  // the user dragged the video outside the window: back to the whole film
+  const t = els.video.currentTime;
+  if (t < state.clip.from - 1 || t > state.clip.to + 1) setClip(null);
+});
+els.video.addEventListener('seeked', () => { internalSeek = false; });
+clipEls.replay.addEventListener('click', () => state.clip && playFrom(state.clip.from));
+clipEls.exit.addEventListener('click', () => setClip(null));
 
 // Jump to a moment and play. After a long analysis (especially with the bigger model) a phone may
 // have released the player's video decoder; then the video is reloaded and we try again.
@@ -731,6 +779,7 @@ async function playFrom(t) {
   };
   const attempt = async () => {
     if (v.error || v.readyState < 2) await reload();
+    internalSeek = true;
     v.currentTime = t;
     await waitFor(v, 'seeked', 5000);
     await v.play();
@@ -781,6 +830,7 @@ els.timeline.addEventListener('click', (e) => {
   if (!state.frames.length) return;
   const r = els.timeline.getBoundingClientRect();
   const i = Math.min(state.frames.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * state.frames.length)));
+  setClip(null);
   playFrom(state.frames[i].t);
 });
 
