@@ -337,6 +337,7 @@ function setDot(mode) {
 
 function resetResults() {
   setDot(null);
+  if (state.analysis) clearSession();
   state.analysis = null;
   if (!state.analyzing) els.analyze.textContent = 'Przeanalizuj film';
   state.frames = [];
@@ -363,10 +364,19 @@ els.file.addEventListener('change', () => {
   state.videoUrl = URL.createObjectURL(file);
   els.video.src = state.videoUrl;
   setClip(null);
-  // the same film picked again (e.g. after the phone took away access to it): keep the analysis
+  els.videoWrap.hidden = false;
+  els.roiRow.hidden = false;
+  els.intervalRow.hidden = false;
+  document.getElementById('motion-row').hidden = false;
+  // the same film picked again (e.g. after the phone took away access to it, or after the phone
+  // closed the app in the background): keep the analysis
   if (sameFile(file, state.file) && state.frames.length && !state.busy) {
     state.file = file;
-    els.analyzeStatus.textContent = `Wczytano ponownie ten sam film (${file.name}). Wyniki analizy zostały zachowane.`;
+    els.analyzeStatus.textContent = `Wczytano ponownie ten sam film (${file.name}). Wyniki analizy zostały zachowane, możesz szukać.`;
+    setDot(state.frames.length ? 'done' : null);
+    els.video.addEventListener('loadedmetadata', renderRoi, { once: true });
+    analyzeButtonText();
+    updateButtons();
     return;
   }
   state.file = file;
@@ -550,6 +560,7 @@ els.analyze.addEventListener('click', async () => {
       }
 
       const done = i + 1;
+      if (done % 50 === 0) { state.analysis.aiCount = aiCount; saveSession(); }
       {
         const perFrame = (performance.now() - started - pausedMs) / Math.max(1, done - startIndex);
         const left = Math.round(((times.length - done) * perFrame) / 1000);
@@ -562,6 +573,7 @@ els.analyze.addEventListener('click', async () => {
     v.currentTime = 0;
     state.analysis.aiCount = aiCount;
     state.analysis.complete = !state.stop && state.frames.length >= times.length;
+    saveSession(true);
     const analysed = state.frames.length ? fmtTime(state.frames[state.frames.length - 1].t) : '0:00';
     els.analyzeStatus.textContent = (state.stop ? `Zatrzymano na ${analysed}. ` : 'Gotowe: ')
       + `sprawdzono ${state.frames.length} klatek`
@@ -1021,10 +1033,80 @@ els.timeline.addEventListener('click', (e) => {
 });
 
 // ---------- start ----------
+// ---------- surviving a restart by the phone ----------
+// Android may close the app in the background to free memory; Chrome then reloads it and everything
+// in memory is gone. The analysis (not the film) is kept in the browser's storage ONLY for that case:
+// it is restored after such a reload and deleted whenever the app is opened normally.
+const SESSION_DB = 'szukaj-sesja';
+function sessionDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SESSION_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('s');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function sessionDo(mode, fn) {
+  const db = await sessionDb();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('s', mode);
+      const r = fn(tx.objectStore('s'));
+      tx.oncomplete = () => resolve(r?.result);
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+let saveTimer = null;
+let saving = Promise.resolve();
+function saveSession(immediate = false) {
+  clearTimeout(saveTimer);
+  const save = () => {
+    if (!state.file || !state.frames.length || !state.analysis) return;
+    const f = state.file;
+    const data = {
+      file: { name: f.name, size: f.size, lastModified: f.lastModified },
+      analysis: state.analysis, frames: state.frames, interval: state.interval,
+      modelKey: state.analysedModel, roi: state.roi, motionOnly: els.motionOnly.checked, intervalValue: els.interval.value,
+    };
+    saving = sessionDo('readwrite', (st) => st.put(data, 'current')).catch((e) => console.warn('session save failed', e));
+  };
+  if (immediate) save(); else saveTimer = setTimeout(save, 300);
+}
+// the app going to the background is exactly when the phone may close it: save right away
+document.addEventListener('visibilitychange', () => { if (document.hidden && state.analysis) saveSession(true); });
+const clearSession = () => sessionDo('readwrite', (st) => st.delete('current')).catch(() => {});
+
+async function restoreSession() {
+  const nav = performance.getEntriesByType?.('navigation')[0];
+  const restarted = document.wasDiscarded || nav?.type === 'reload';
+  if (!restarted) { await clearSession(); return; }
+  let data;
+  try { data = await sessionDo('readonly', (st) => st.get('current')); } catch { return; }
+  if (!data || !data.frames?.length) return;
+  if (data.modelKey !== state.modelKey) {
+    if ($(`model-${data.modelKey}`)?.disabled) { await clearSession(); return; }
+    $(`model-${data.modelKey}`).checked = true;
+    await switchModel(data.modelKey);
+  }
+  state.file = data.file;
+  state.frames = data.frames;
+  state.interval = data.interval;
+  state.analysedModel = data.modelKey;
+  els.motionOnly.checked = data.motionOnly;
+  els.interval.value = data.intervalValue;
+  state.roi = data.roi;
+  state.analysis = data.analysis;
+  els.analyzeStatus.textContent = `Telefon zamknął aplikację w tle (żeby zwolnić pamięć). Kliknij „Wybierz filmik” i wybierz ponownie „${data.file.name}”. `
+    + `Analiza (${data.frames.length} klatek) zostanie przywrócona bez liczenia od nowa.`;
+  updateButtons();
+}
+
 const swReady = registerServiceWorker();
 (async () => {
   await swReady;
   await setupModelChoice();
+  await restoreSession().catch((e) => console.warn('restore failed', e));
   if (LOCAL) {
     els.modelHint.textContent = 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.';
     ensureModel().catch(() => {});

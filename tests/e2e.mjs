@@ -206,6 +206,18 @@ const browser = await chromium.launch();
   const st4 = await page.textContent('#analyze-status');
   check(/sprawdzono 20 klatek/.test(st4), `resumes and finishes all frames: "${st4.slice(0, 40)}…"`);
 
+  // the phone closes the app in the background and Chrome reloads it: the analysis comes back
+  await page.reload();
+  await page.waitForFunction(() => /zamknął aplikację w tle/.test(document.getElementById('analyze-status').textContent), null, { timeout: 15000 })
+    .then(() => check(true, 'after a restart the app asks to pick the same film again'),
+          async () => check(false, `after restart: "${await page.textContent('#analyze-status')}"`));
+  await page.setInputFiles('#file', cctvPath);
+  check(/zachowane/.test(await page.textContent('#analyze-status')), 'picking the same film restores the analysis');
+  await page.fill('#query', 'czerwony');
+  await page.click('#search');
+  await page.waitForFunction(() => !document.getElementById('search').disabled);
+  check(/^▶ 0:0[7-9]|^▶ 0:1[0-2]/.test(await page.textContent('#results li .time')), `search works on the restored analysis: ${await page.textContent('#results li .time')}`);
+
   // a file that does not store its length (screen recordings, messengers): must still be analysed
   if (process.env.NODUR_VIDEO) {
     await page.setInputFiles('#file', process.env.NODUR_VIDEO);
