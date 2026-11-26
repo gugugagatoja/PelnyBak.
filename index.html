@@ -23,8 +23,12 @@
         <strong>Model AI</strong>
         <span id="model-status" class="pill">nie wczytany</span>
       </div>
+      <div class="model-choice" id="model-choice" role="radiogroup" aria-label="Wybór modelu AI">
+        <label><input type="radio" name="model" value="fast" id="model-fast" checked> <span><b>Szybki</b> <small id="model-fast-note"></small></span></label>
+        <label><input type="radio" name="model" value="accurate" id="model-accurate"> <span><b>Dokładny</b> <small id="model-accurate-note"></small></span></label>
+      </div>
       <div class="progress" id="model-progress" hidden><div></div></div>
-      <p class="hint" id="model-hint">Za pierwszym razem aplikacja pobierze model (ok. 90&nbsp;MB, najlepiej przez Wi-Fi). Potem działa bez internetu.</p>
+      <p class="hint" id="model-hint">Za pierwszym razem aplikacja pobierze wybrany model (najlepiej przez Wi-Fi). Potem działa bez internetu.</p>
     </section>
 
     <section class="card">

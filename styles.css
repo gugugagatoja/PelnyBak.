@@ -103,3 +103,9 @@ video { width: 100%; max-height: 50vh; margin-top: 12px; border-radius: 10px; ba
 .roi-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 0; }
 .roi-row button { flex: 1 1 auto; }
 #roi-edit.active { background: #ffd33d; color: #1b1f24; border-color: #ffd33d; font-weight: 600; }
+.model-choice { display: grid; gap: 8px; margin: 10px 0 4px; }
+.model-choice label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.model-choice label:has(input:checked) { border-color: var(--accent); }
+.model-choice label:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.model-choice input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
+.model-choice small { display: block; color: var(--muted); font-size: 0.85rem; }

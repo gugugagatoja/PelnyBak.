@@ -1,11 +1,11 @@
 // Service worker: makes the app work offline.
 // - app files: fresh from the network when online, from the cache when offline
 // - AI runtime from cdn.jsdelivr.net: cached on first use (model weights are cached by Transformers.js itself)
-const VERSION = 'v2';
+const VERSION = 'v3';
 const APP_CACHE = `app-${VERSION}`;
 const CDN_CACHE = 'cdn-v1';
 const APP_FILES = [
-  './', 'index.html', 'styles.css', 'app.js', 'worker.js', 'translate.js',
+  './', 'index.html', 'styles.css', 'app.js', 'worker.js', 'translate.js', 'models.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 const LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/';

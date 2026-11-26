@@ -1,8 +1,9 @@
 import { translatePlToEn } from './translate.js';
+import { MODELS, DEFAULT_MODEL } from './models.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  modelStatus: $('model-status'), modelProgress: $('model-progress'), modelHint: $('model-hint'),
+  modelStatus: $('model-status'), modelChoice: $('model-choice'), modelProgress: $('model-progress'), modelHint: $('model-hint'),
   file: $('file'), video: $('video'), videoWrap: $('video-wrap'),
   roiLayer: $('roi-layer'), roiBox: $('roi-box'), roiRow: $('roi-row'), roiEdit: $('roi-edit'), roiClear: $('roi-clear'), roiHint: $('roi-hint'), intervalRow: $('interval-row'), interval: $('interval'),
   analyze: $('analyze'), motionOnly: $('motion-only'), analyzeProgress: $('analyze-progress'), analyzeStatus: $('analyze-status'),
@@ -86,7 +87,8 @@ function createWorkerEngine() {
     load(progressCb) {
       if (progressCb) onProgress = progressCb;
       if (!readyPromise) {
-        readyPromise = call({ type: 'load', local: LOCAL });
+        const m = MODELS[state.modelKey];
+        readyPromise = call({ type: 'load', local: LOCAL, model: { id: m.id, family: m.family, dtype: m.dtype } });
         readyPromise.catch(() => { readyPromise = null; });
       }
       return readyPromise;
@@ -108,6 +110,7 @@ const engine = (window.__createTestEngine || createWorkerEngine)();
 
 // ---------- state ----------
 const state = {
+  modelKey: DEFAULT_MODEL,
   modelReady: false,
   videoUrl: null,
   frames: [], // {t, crops: Float32Array[], thumb: dataURL}
@@ -128,8 +131,10 @@ const fmtTime = (t) => {
 };
 const fmtMB = (b) => `${(b / 1048576).toFixed(0)} MB`;
 
+let loadGeneration = 0; // bumped when the model is switched, so an abandoned load stays quiet
 async function ensureModel() {
   if (state.modelReady) return;
+  const gen = loadGeneration;
   els.modelStatus.textContent = 'wczytywanie…';
   els.modelStatus.classList.remove('ok');
   setProgress(els.modelProgress, 0);
@@ -145,7 +150,7 @@ async function ensureModel() {
         });
         break;
       } catch (e) {
-        if (attempt >= ATTEMPTS) throw e;
+        if (attempt >= ATTEMPTS || gen !== loadGeneration) throw e;
         console.warn('Model download failed, retrying:', e);
         engine.reset?.();
         els.modelHint.textContent = `Połączenie przerwane (${e.message}). Ponawiam za chwilę… (próba ${attempt + 1} z ${ATTEMPTS})`;
@@ -153,6 +158,7 @@ async function ensureModel() {
       }
     }
   } catch (e) {
+    if (gen !== loadGeneration) throw e; // the user switched models meanwhile; not a real error
     els.modelStatus.textContent = 'błąd';
     els.modelHint.textContent = `Nie udało się wczytać modelu (${e.message}). ` + (LOCAL
       ? 'Brakuje plików modelu w folderze programu. Pobierz i rozpakuj program jeszcze raz.'
@@ -160,22 +166,73 @@ async function ensureModel() {
     setProgress(els.modelProgress, null);
     throw e;
   }
+  if (gen !== loadGeneration) return ensureModel(); // finished loading a model that is no longer chosen
   state.modelReady = true;
   setProgress(els.modelProgress, null);
-  els.modelStatus.textContent = 'gotowy (offline)';
+  els.modelStatus.textContent = `${MODELS[state.modelKey].label.toLowerCase()}: gotowy (offline)`;
   els.modelStatus.classList.add('ok');
   els.modelHint.textContent = LOCAL
     ? 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.'
     : 'Model jest zapisany na tym urządzeniu. Aplikacja działa bez internetu.';
 }
 
-async function modelIsCached() {
+async function modelIsCached(key = state.modelKey) {
   try {
     if (!('caches' in window)) return false;
+    const id = MODELS[key].id;
     const cache = await caches.open('transformers-cache');
-    const keys = await cache.keys();
+    const keys = (await cache.keys()).filter((r) => r.url.includes(`/${id}/`));
     return keys.some((r) => r.url.includes('vision_model')) && keys.some((r) => r.url.includes('text_model'));
   } catch { return false; }
+}
+
+// ---------- model choice ----------
+// desktop: is this model shipped in the program folder? (the "lite" version has only the fast one)
+async function modelAvailableLocally(key) {
+  try { return (await fetch(`models/${MODELS[key].id}/config.json`, { method: 'HEAD' })).ok; } catch { return false; }
+}
+
+function savedModelKey() {
+  try { const k = localStorage.getItem('model'); return MODELS[k] ? k : DEFAULT_MODEL; } catch { return DEFAULT_MODEL; }
+}
+
+async function setupModelChoice() {
+  for (const [key, m] of Object.entries(MODELS)) {
+    const input = $(`model-${key}`);
+    $(`model-${key}-note`).textContent = `${m.note} · ok. ${m.sizeMB} MB`;
+    if (LOCAL && !(await modelAvailableLocally(key))) {
+      input.disabled = true;
+      input.dataset.unavailable = '1';
+      $(`model-${key}-note`).textContent = 'niedostępny w tej wersji programu (pobierz wersję „pełną”)';
+    }
+  }
+  let key = savedModelKey();
+  if ($(`model-${key}`).disabled) key = DEFAULT_MODEL;
+  state.modelKey = key;
+  $(`model-${key}`).checked = true;
+  els.modelChoice.addEventListener('change', (e) => {
+    if (state.busy) { $(`model-${state.modelKey}`).checked = true; return; }
+    switchModel(e.target.value);
+  });
+}
+
+async function switchModel(key) {
+  if (key === state.modelKey || !MODELS[key]) return;
+  state.modelKey = key;
+  try { localStorage.setItem('model', key); } catch {}
+  loadGeneration++;
+  engine.reset?.();
+  state.modelReady = false;
+  els.modelStatus.textContent = 'nie wczytany';
+  els.modelStatus.classList.remove('ok');
+  els.modelHint.textContent = LOCAL
+    ? 'Model zostanie wczytany z folderu programu.'
+    : `Za pierwszym razem aplikacja pobierze ten model (ok. ${MODELS[key].sizeMB} MB, najlepiej przez Wi-Fi).`;
+  if (state.frames.length) {
+    resetResults();
+    els.analyzeStatus.textContent = 'Zmieniono model AI. Kliknij „Przeanalizuj film” jeszcze raz.';
+  }
+  if (LOCAL || await modelIsCached(key)) ensureModel().catch(() => {});
 }
 
 // ---------- video & frames ----------
@@ -218,6 +275,7 @@ function resetResults() {
 
 function updateButtons() {
   els.roiEdit.disabled = els.roiClear.disabled = !!state.analyzing;
+  for (const input of els.modelChoice.querySelectorAll('input')) input.disabled = !!state.busy || input.dataset.unavailable === '1';
   els.analyze.disabled = (state.busy && !state.analyzing) || !state.videoUrl;
   els.search.disabled = state.busy || state.frames.length === 0 || !els.queryEn.value.trim();
 }
@@ -305,6 +363,7 @@ els.analyze.addEventListener('click', async () => {
     const W = v.videoWidth, H = v.videoHeight;
     const interval = parseFloat(els.interval.value);
     state.interval = interval;
+    state.analysedModel = state.modelKey;
 
     const cropCanvas = makeCanvas(CROP, CROP);
     const cctx = cropCanvas.getContext('2d', { willReadFrequently: true });
@@ -584,9 +643,10 @@ function findMoments(scores, raw, maxResults = 6) {
 }
 
 function confidence(rawSim) {
-  // typical CLIP ViT-B/32 cosine similarities: ~0.30+ is a strong match, <0.25 weak
-  if (rawSim >= 0.29) return 'wysoka';
-  if (rawSim >= 0.25) return 'średnia';
+  // thresholds of the raw image-text similarity, per model (CLIP: ~0.30+ strong, <0.25 weak)
+  const [high, mid] = MODELS[state.analysedModel || state.modelKey].conf;
+  if (rawSim >= high) return 'wysoka';
+  if (rawSim >= mid) return 'średnia';
   return 'niska';
 }
 
@@ -663,6 +723,7 @@ els.timeline.addEventListener('click', (e) => {
 const swReady = registerServiceWorker();
 (async () => {
   await swReady;
+  await setupModelChoice();
   if (LOCAL) {
     els.modelHint.textContent = 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.';
     ensureModel().catch(() => {});

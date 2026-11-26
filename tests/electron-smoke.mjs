@@ -16,6 +16,7 @@ const args = process.argv.slice(2);
 const video = args[0];
 const expectModel = args.includes('--expect-model');
 const shot = args.includes('--screenshot') ? args[args.indexOf('--screenshot') + 1] : null;
+const modelKey = args.includes('--model') ? args[args.indexOf('--model') + 1] : null;
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
@@ -37,7 +38,16 @@ const blocked = await page.evaluate(() => fetch('https://example.com/').then(() 
 check(blocked, 'internet access is blocked inside the app');
 check(await page.evaluate(() => crossOriginIsolated), 'multi-threaded AI available (cross-origin isolated)');
 
-await page.waitForFunction(() => /błąd|gotowy/.test(document.getElementById('model-status').textContent), null, { timeout: 180000 });
+if (modelKey) {
+  await page.waitForFunction((k) => !document.getElementById(`model-${k}`).disabled, modelKey, { timeout: 30000 });
+  await page.check(`#model-${modelKey}`);
+  console.log(`  model chosen: ${modelKey}`);
+}
+await page.waitForFunction((k) => {
+  const t = document.getElementById('model-status').textContent;
+  const label = k && document.getElementById(`model-${k}`).parentElement.querySelector('b').textContent.toLowerCase();
+  return /błąd/.test(t) || (/gotowy/.test(t) && (!k || t.startsWith(label)));
+}, modelKey, { timeout: 300000 });
 const status = await page.textContent('#model-status');
 const hint = await page.textContent('#model-hint');
 console.log(`  model: ${status} | ${hint}`);

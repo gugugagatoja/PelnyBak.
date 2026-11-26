@@ -36,6 +36,8 @@ jobs:
             -f lavfi -i color=green:s=640x360:d=4 -filter_complex "[0][1][2]concat=n=3:v=1[v]" -map "[v]" test.webm
       - name: Run the desktop app with the real model
         run: xvfb-run -a node tests/electron-smoke.mjs test.webm --expect-model --screenshot screenshot.png
+      - name: Run the desktop app with the accurate model
+        run: xvfb-run -a node tests/electron-smoke.mjs test.webm --expect-model --model accurate
       - name: Test the web version (real model download, then offline)
         working-directory: desktop
         run: npx playwright install --with-deps chromium && cd .. && node tests/web-real.mjs test.webm
@@ -46,9 +48,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete program-windows --yes --cleanup-tag || true
-          gh release create program-windows desktop/dist/Szukaj-w-filmie-Windows.zip --target "$GITHUB_SHA" \
-            --title "Szukaj w filmie – program dla Windows" \
-            --notes "Rozpakuj ZIP (np. na pendrive) i uruchom **Szukaj w filmie.exe** w folderze *Szukaj w filmie*. Działa offline, model AI jest w środku, nic nie trzeba instalować. Jeśli Windows pokaże ostrzeżenie: *Więcej informacji* → *Uruchom mimo to*."
+          gh release create program-windows desktop/dist/Szukaj-w-filmie-Windows-lekki.zip desktop/dist/Szukaj-w-filmie-Windows-pelny.zip \
+            --target "$GITHUB_SHA" --title "Szukaj w filmie – program dla Windows" \
+            --notes "Dwie wersje do wyboru: **lekki** – tylko szybki model AI (mniejszy plik); **pełny** – szybki i dokładny model AI. Rozpakuj ZIP (np. na pendrive) i uruchom **Szukaj w filmie.exe** w folderze *Szukaj w filmie*. Działa offline, nic nie trzeba instalować. Jeśli Windows pokaże ostrzeżenie: *Więcej informacji* → *Uruchom mimo to*."
       - uses: actions/upload-artifact@v4
         if: always()
         with:

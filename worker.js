@@ -1,5 +1,5 @@
 // Web Worker: runs the CLIP model off the main thread so the UI stays responsive.
-// Messages in:  {type:'load', local} | {type:'image', id, width, height, buffer} | {type:'text', id, texts}
+// Messages in:  {type:'load', local, model:{id, family, dtype}} | {type:'image', id, width, height, buffer} | {type:'text', id, texts}
 // Messages out: {type:'progress', loaded, total} | {type:'ready'} | {type:'error', message}
 //               {type:'image', id, emb} | {type:'text', id, embs}
 //
@@ -9,9 +9,7 @@
 //    Nothing is downloaded.
 
 const CDN_LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6/dist/transformers.min.js';
-export const MODEL_ID = 'Xenova/clip-vit-base-patch32';
-
-let tokenizer, processor, textModel, visionModel, RawImage;
+let tokenizer, processor, textModel, visionModel, RawImage, family;
 let loading = null;
 
 function normalize(data) {
@@ -23,12 +21,16 @@ function normalize(data) {
   return out;
 }
 
-function load(local) {
+function load(local, model) {
   if (loading) return loading;
+  const { id: MODEL_ID, dtype } = model;
+  family = model.family;
   loading = (async () => {
     const here = (p) => new URL(p, self.location.href).href;
     const lib = await import(local ? here('./vendor/transformers.min.js') : CDN_LIB);
-    const { env, AutoTokenizer, AutoProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection } = lib;
+    const { env, AutoTokenizer, AutoProcessor } = lib;
+    const TextModel = family === 'siglip' ? lib.SiglipTextModel : lib.CLIPTextModelWithProjection;
+    const VisionModel = family === 'siglip' ? lib.SiglipVisionModel : lib.CLIPVisionModelWithProjection;
     RawImage = lib.RawImage;
     if (local) {
       env.allowRemoteModels = false;
@@ -50,12 +52,12 @@ function load(local) {
         postMessage({ type: 'progress', loaded, total });
       }
     };
-    const opts = { dtype: 'q8', device: 'wasm', progress_callback };
+    const opts = { dtype, device: 'wasm', progress_callback };
     [tokenizer, processor, textModel, visionModel] = await Promise.all([
       AutoTokenizer.from_pretrained(MODEL_ID, { progress_callback }),
       AutoProcessor.from_pretrained(MODEL_ID, { progress_callback }),
-      CLIPTextModelWithProjection.from_pretrained(MODEL_ID, opts),
-      CLIPVisionModelWithProjection.from_pretrained(MODEL_ID, opts),
+      TextModel.from_pretrained(MODEL_ID, opts),
+      VisionModel.from_pretrained(MODEL_ID, opts),
     ]);
   })();
   loading.catch(() => { loading = null; });
@@ -65,13 +67,15 @@ function load(local) {
 async function embedImage({ width, height, buffer }) {
   const image = new RawImage(new Uint8ClampedArray(buffer), width, height, 4).rgb();
   const inputs = await processor(image);
-  const { image_embeds } = await visionModel(inputs);
-  return normalize(image_embeds.data);
+  const out = await visionModel(inputs);
+  return normalize((out.image_embeds || out.pooler_output).data);
 }
 
 async function embedTexts(texts) {
-  const inputs = tokenizer(texts, { padding: true, truncation: true });
-  const { text_embeds } = await textModel(inputs);
+  // SigLIP was trained on texts padded to a fixed length
+  const inputs = tokenizer(texts, family === 'siglip' ? { padding: 'max_length', truncation: true } : { padding: true, truncation: true });
+  const out = await textModel(inputs);
+  const text_embeds = out.text_embeds || out.pooler_output;
   const dim = text_embeds.dims[1];
   const embs = [];
   for (let i = 0; i < texts.length; i++) {
@@ -83,7 +87,7 @@ async function embedTexts(texts) {
 self.onmessage = async ({ data: msg }) => {
   try {
     if (msg.type === 'load') {
-      await load(!!msg.local);
+      await load(!!msg.local, msg.model);
       postMessage({ type: 'ready' });
     } else if (msg.type === 'image') {
       if (!loading) throw new Error('Model nie jest wczytany');
