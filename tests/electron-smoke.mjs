@@ -64,8 +64,9 @@ if (expectModel) {
   for (const [q, re] of [['czerwony', /^▶ 0:0[0-4]/], ['zielony', /^▶ 0:(0[7-9]|1[01])/]]) {
     await page.fill('#query', q);
     await page.click('#search');
+    // wait until this search has finished (the button is disabled while it runs), not just for old results
+    await page.waitForFunction(() => !document.getElementById('search').disabled, null, { timeout: 60000 });
     await page.waitForSelector('#results li .time');
-    await page.waitForTimeout(300);
     const first = (await page.textContent('#results li .time')).trim();
     const score = await page.textContent('#results li .score');
     check(re.test(first), `real AI: "${q}" -> ${first} (${score.trim()})`);

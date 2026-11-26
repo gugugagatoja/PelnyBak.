@@ -11,8 +11,9 @@ export const MODELS = {
   accurate: {
     id: 'Xenova/siglip-base-patch16-224', family: 'siglip', dtype: 'q8', sizeMB: 200,
     label: 'Dokładny', note: 'większy i ok. 2× wolniejszy; lepiej rozróżnia szczegóły',
-    // SigLIP similarities are lower than CLIP's: match probability 50% at ~0.11 (scale ~117, bias ~-12.9)
-    conf: [0.11, 0.09],
+    // SigLIP similarities are much lower than CLIP's. Measured in the browser (tests/browser-model-check.mjs):
+    // right description ~0.06-0.09, wrong one ~0.00-0.04
+    conf: [0.07, 0.045],
   },
 };
 export const DEFAULT_MODEL = 'fast';
