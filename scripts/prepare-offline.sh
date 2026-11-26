@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds desktop/app: the web app + AI runtime (vendor/) + CLIP model (models/), for fully offline use.
-# Needs: desktop/node_modules installed (npm ci in desktop/) and internet access to huggingface.co.
+# Needs: npm and internet access to registry.npmjs.org and huggingface.co.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/desktop/app"
@@ -11,7 +11,10 @@ rm -rf "$OUT"
 mkdir -p "$OUT/vendor" "$OUT/models/$MODEL/onnx"
 cp -r "$ROOT"/{index.html,styles.css,app.js,worker.js,translate.js,manifest.webmanifest,icons} "$OUT/"
 
-DIST="$ROOT/desktop/node_modules/@huggingface/transformers/dist"
+# AI runtime: only the 3 browser files of the npm package are needed (no install scripts run)
+TMP="$(mktemp -d)"
+(cd "$TMP" && npm pack @huggingface/transformers@3.7.6 --silent >/dev/null && tar xzf ./*.tgz)
+DIST="$TMP/package/dist"
 cp "$DIST"/transformers.min.js "$DIST"/ort-wasm-simd-threaded.jsep.mjs "$DIST"/ort-wasm-simd-threaded.jsep.wasm "$OUT/vendor/"
 
 fetch() { curl -fL --retry 4 --retry-delay 3 -o "$OUT/models/$MODEL/$1" "$HF/$1"; }
