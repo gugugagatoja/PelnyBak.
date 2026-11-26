@@ -166,6 +166,23 @@ const browser = await chromium.launch();
             async () => check(false, `area search result: ${await page.textContent('#results li .time')}`));
     if (shotDir) await page.screenshot({ path: path.join(shotDir, 'roi.png'), fullPage: true });
   }
+  // clicking "analyse" again for the same film and settings does not redo the work
+  check((await page.textContent('#analyze')).includes('Film przeanalizowany'), 'button shows the film is analysed');
+  await page.click('#analyze');
+  check(/już przeanalizowany/.test(await page.textContent('#analyze-status')) && await page.isVisible('#results li'),
+    'same film + same settings: no new analysis, results kept');
+  // stop half-way, then resume: continues instead of starting again
+  await page.click('#reanalyze');
+  await page.waitForFunction(() => /Analiza: 0:0[4-9]/.test(document.getElementById('analyze-status').textContent), null, { timeout: 30000 });
+  await page.click('#analyze'); // Zatrzymaj
+  await page.waitForFunction(() => /Zatrzymano/.test(document.getElementById('analyze-status').textContent), null, { timeout: 30000 });
+  check((await page.textContent('#analyze')).includes('Wznów'), 'after stopping, the button offers to resume');
+  const before = await page.evaluate(() => document.getElementById('analyze-status').textContent.match(/sprawdzono (\d+)/)?.[1]);
+  await page.click('#analyze');
+  await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
+  const st5 = await page.textContent('#analyze-status');
+  check(/sprawdzono 20 klatek/.test(st5) && Number(before) > 0, `resumed from frame ${before} and finished: "${st5.slice(0, 32)}…"`);
+
   // picking the same film again keeps the analysis (results stay)
   await page.setInputFiles('#file', cctvPath);
   check(/Wyniki analizy zostały zachowane/.test(await page.textContent('#analyze-status')), 'same film picked again keeps the analysis');

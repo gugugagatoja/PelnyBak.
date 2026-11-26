@@ -337,6 +337,8 @@ function setDot(mode) {
 
 function resetResults() {
   setDot(null);
+  state.analysis = null;
+  if (!state.analyzing) els.analyze.textContent = 'Przeanalizuj film';
   state.frames = [];
   state.scores = null;
   els.results.innerHTML = '';
@@ -435,13 +437,39 @@ async function embedWithRetry(imageData, t) {
   }
 }
 
+// What an analysis depends on: same film + same settings = the results can be reused / continued.
+function analysisKey() {
+  const f = state.file;
+  return JSON.stringify([f && [f.name, f.size, f.lastModified], state.modelKey, state.roi, els.interval.value, els.motionOnly.checked]);
+}
+function analyzeButtonText() {
+  const a = state.analysis;
+  els.analyze.textContent = a && a.key === analysisKey() && state.frames.length
+    ? (a.complete ? '✔ Film przeanalizowany' : '▶ Wznów analizę')
+    : 'Przeanalizuj film';
+}
+els.interval.addEventListener('change', analyzeButtonText);
+els.motionOnly.addEventListener('change', analyzeButtonText);
+
 els.analyze.addEventListener('click', async () => {
   if (state.analyzing) { state.stop = true; els.analyze.textContent = 'Zatrzymywanie…'; return; }
   if (!state.videoUrl || state.busy) return;
+  const key = analysisKey();
+  const same = state.analysis && state.analysis.key === key && state.frames.length > 0;
+  if (same && state.analysis.complete) {
+    // nothing to redo: the same film was already analysed with the same settings
+    els.analyzeStatus.textContent = `Ten film jest już przeanalizowany z tymi ustawieniami (${state.frames.length} klatek). Możesz od razu szukać. `;
+    const again = document.createElement('button');
+    again.type = 'button'; again.className = 'link-btn'; again.id = 'reanalyze'; again.textContent = 'Analizuj od nowa';
+    again.addEventListener('click', () => { state.analysis = null; els.analyze.click(); });
+    els.analyzeStatus.append(again);
+    return;
+  }
   state.busy = true;
   state.analyzing = true;
   state.stop = false;
-  resetResults();
+  if (!same) { resetResults(); state.analysis = { key, complete: false, aiCount: 0 }; }
+  const startIndex = state.frames.length; // > 0 when continuing a stopped analysis
   setDot('busy');
   setClip(null);
   if (roiEditing) setRoiEditing(false);
@@ -480,13 +508,14 @@ els.analyze.addEventListener('click', async () => {
     const gh = R.w >= R.h ? Math.max(8, Math.round(64 * R.h / R.w)) : 64;
     const gctx = makeCanvas(gw, gh).getContext('2d', { willReadFrequently: true });
     let ref = null; // last frame checked by AI: {gray, crops, thumb, t}
-    let aiCount = 0;
+    let aiCount = state.analysis.aiCount;
 
     const times = [];
     for (let t = Math.min(0.1, duration / 2); t < duration; t += interval) times.push(t);
     const started = performance.now();
     let pausedMs = 0;
-    for (let i = 0; i < times.length && !state.stop; i++) {
+    if (startIndex) els.analyzeStatus.textContent = `▶ Wznawiam analizę od ${fmtTime(times[startIndex] ?? 0)}…`;
+    for (let i = startIndex; i < times.length && !state.stop; i++) {
       // Android stops video decoding for apps in the background: wait until the app is visible again
       if (document.hidden) {
         const p0 = performance.now();
@@ -522,7 +551,7 @@ els.analyze.addEventListener('click', async () => {
 
       const done = i + 1;
       {
-        const perFrame = (performance.now() - started - pausedMs) / done;
+        const perFrame = (performance.now() - started - pausedMs) / Math.max(1, done - startIndex);
         const left = Math.round(((times.length - done) * perFrame) / 1000);
         setProgress(els.analyzeProgress, done / times.length);
         els.analyzeStatus.textContent = `Analiza: ${fmtTime(times[i])} z ${fmtTime(duration)}`
@@ -531,6 +560,8 @@ els.analyze.addEventListener('click', async () => {
       }
     }
     v.currentTime = 0;
+    state.analysis.aiCount = aiCount;
+    state.analysis.complete = !state.stop && state.frames.length >= times.length;
     const analysed = state.frames.length ? fmtTime(state.frames[state.frames.length - 1].t) : '0:00';
     els.analyzeStatus.textContent = (state.stop ? `Zatrzymano na ${analysed}. ` : 'Gotowe: ')
       + `sprawdzono ${state.frames.length} klatek`
@@ -548,7 +579,7 @@ els.analyze.addEventListener('click', async () => {
     wakeLock?.release?.().catch?.(() => {});
     state.busy = false;
     state.analyzing = false;
-    els.analyze.textContent = 'Przeanalizuj film';
+    analyzeButtonText();
     updateButtons();
   }
 });
