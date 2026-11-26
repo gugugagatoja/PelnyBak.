@@ -79,5 +79,5 @@ Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać 
 ffmpeg -f lavfi -i color=red:s=640x360:d=4 -f lavfi -i color=blue:s=640x360:d=4 -f lavfi -i color=green:s=640x360:d=4 \
   -filter_complex "[0][1][2]concat=n=3:v=1[v]" -map "[v]" test.webm
 node tests/e2e.mjs test.webm
-# opcjonalnie nagranie „z kamery”: CCTV_VIDEO=cctv.webm node tests/e2e.mjs test.webm
+# opcjonalnie: CCTV_VIDEO=cctv.webm NODUR_VIDEO=film-bez-dlugosci.webm node tests/e2e.mjs test.webm
 ```

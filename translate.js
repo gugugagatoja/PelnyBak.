@@ -22,6 +22,23 @@ const DICT = [
   ['swetr', 'sweater'], ['spodni', 'trousers'], ['dzins', 'jeans'], ['spodenk', 'shorts'], ['spodnic', 'skirt'],
   ['sukien', 'dress'], ['garnitur', 'suit'], ['buty', 'shoes'], ['butach', 'shoes'], ['butami', 'shoes'],
   ['szalik', 'scarf'], ['rekawicz', 'gloves'], ['okular', 'glasses'], ['plecak', 'backpack'], ['torb', 'bag'],
+  // everyday objects
+  ['klucz', 'keys'], ['kluczyk', 'car keys'], ['portfel', 'wallet'], ['portmonetk', 'purse'], ['torebk', 'handbag'],
+  ['laptop', 'laptop'], ['komputer', 'computer'], ['tablet', 'tablet'], ['smartfon', 'smartphone'], ['komork', 'phone'],
+  ['kubek', 'mug'], ['kubk', 'mug'], ['butelk', 'bottle'], ['szklank', 'glass'], ['puszk', 'can'], ['piwo', 'beer'], ['piwa', 'beer'],
+  ['noz', 'knife'], ['noze', 'knife'], ['nozem', 'knife'], ['nozyk', 'knife'], ['ksiazk', 'book'], ['zeszyt', 'notebook'],
+  ['pudel', 'box'], ['karton', 'cardboard box'], ['paczk', 'parcel'], ['przesylk', 'parcel'], ['koperta', 'envelope'], ['kopert', 'envelope'],
+  ['dokument', 'documents'], ['kartk', 'sheet of paper'], ['papier', 'paper'], ['pieniadz', 'money'], ['pieniedz', 'money'], ['banknot', 'banknotes'],
+  ['krzesl', 'chair'], ['stol', 'table'], ['lozk', 'bed'], ['kanap', 'sofa'], ['fotel', 'armchair'], ['szaf', 'wardrobe'],
+  ['okno', 'window'], ['okna', 'window'], ['oknie', 'window'], ['okien', 'windows'], ['lamp', 'lamp'], ['telewiz', 'television'],
+  ['zegar', 'clock'], ['zegarek', 'watch'], ['zegark', 'watch'], ['kwiat', 'flowers'], ['roslin', 'plant'], ['doniczk', 'flower pot'],
+  ['choink', 'christmas tree'], ['prezent', 'gift'], ['zabawk', 'toy'], ['pluszak', 'teddy bear'], ['maskotk', 'plush toy'], ['lalk', 'doll'],
+  ['pilk', 'ball'], ['worek', 'sack'], ['work', 'sack'], ['smietnik', 'trash bin'], ['kosz', 'basket'], ['drabin', 'ladder'],
+  ['mlotek', 'hammer'], ['mlotk', 'hammer'], ['narzedz', 'tools'], ['wiertark', 'drill'], ['pila', 'saw'], ['latark', 'flashlight'],
+  ['papieros', 'cigarette'], ['smycz', 'leash'], ['ogien', 'fire'], ['ognia', 'fire'], ['dym', 'smoke'], ['dymu', 'smoke'],
+  ['latarni', 'street lamp'], ['swiatl', 'light'], ['bron', 'weapon'], ['pistolet', 'pistol'], ['kij', 'stick'], ['kije', 'sticks'],
+  ['listonosz', 'mailman'], ['kurier', 'courier'], ['zlodziej', 'thief'], ['karetk', 'ambulance'], ['radiowoz', 'police car'],
+  ['taksowk', 'taxi'], ['dostawcz', 'delivery van'], ['furgon', 'van'], ['bus', 'van'], ['busa', 'van'],
   ['walizk', 'suitcase'], ['parasol', 'umbrella'], ['telefon', 'phone'], ['kamizel', 'vest'], ['mundur', 'uniform'],
   ['broda', 'beard'], ['brod', 'beard'], ['wlos', 'hair'], ['blond', 'blonde'], ['lys', 'bald'],
   ['dlug', 'long'], ['krotk', 'short'], ['wysok', 'tall'], ['nisk', 'short'], ['duz', 'big'],
@@ -82,6 +99,19 @@ function translateWord(word) {
   if (exact.has(w)) return exact.get(w);
   for (const [stem, en] of stems) if (w.startsWith(stem)) return en;
   return word; // unknown: keep (may already be English)
+}
+
+// words the dictionary does not know and that are not plain English either (probably Polish)
+const ENGLISH = new Set(DICT.flatMap(([, en]) => en.toLowerCase().split(/[\s,-]+/)).filter(Boolean));
+export function unknownWords(text) {
+  const out = [];
+  for (const token of text.split(/[\s,.;:!?()]+/)) {
+    if (!token || /^\d+$/.test(token)) continue;
+    const w = strip(token);
+    if (exact.has(w) || stems.some(([stem]) => w.startsWith(stem)) || ENGLISH.has(token.toLowerCase())) continue;
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
 }
 
 export function translatePlToEn(text) {

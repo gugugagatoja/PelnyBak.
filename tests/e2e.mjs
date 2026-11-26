@@ -56,12 +56,21 @@ const browser = await chromium.launch();
   page.on('pageerror', (e) => { console.log('pageerror', e.message); failures++; });
   await page.goto(base);
   await page.setInputFiles('#file', videoPath);
+  check(await page.getAttribute('#analysis-dot', 'class') === 'dot', 'status dot is red before analysis');
   await page.waitForSelector('#analyze:not([disabled])');
   await page.click('#analyze');
   await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
   const status = await page.textContent('#analyze-status');
   check(/sprawdzono 1[12] klatek/.test(status), `analysis finished: "${status}"`);
 
+  check(await page.getAttribute('#analysis-dot', 'class') === 'dot done', 'status dot is green after analysis');
+  await page.fill('#query', 'klucze i portfel');
+  check(await page.inputValue('#query-en') === 'keys and wallet', `translation of "klucze i portfel": ${await page.inputValue('#query-en')}`);
+  check(!(await page.isVisible('#query-unknown')), 'no warning when all words are known');
+  await page.fill('#query', 'zielony grzebień');
+  check(await page.isVisible('#query-unknown') && (await page.textContent('#query-unknown')).includes('grzebień'), 'warning names an unknown word');
+  await page.fill('#query', 'red car');
+  check(!(await page.isVisible('#query-unknown')), 'no warning for English descriptions');
   await page.fill('#query', 'osoba w czerwonej czapce, która odchodzi');
   const en = await page.inputValue('#query-en');
   check(en === 'person in red hat, walking away, seen from behind', `translation: "${en}"`);
@@ -146,6 +155,21 @@ const browser = await chromium.launch();
       .then(() => check(true, 'object found only when it enters the area (0:11)'),
             async () => check(false, `area search result: ${await page.textContent('#results li .time')}`));
     if (shotDir) await page.screenshot({ path: path.join(shotDir, 'roi.png'), fullPage: true });
+  }
+  // a file that does not store its length (screen recordings, messengers): must still be analysed
+  if (process.env.NODUR_VIDEO) {
+    await page.setInputFiles('#file', process.env.NODUR_VIDEO);
+    await page.click('#roi-clear').catch(() => {});
+    await page.waitForSelector('#analyze:not([disabled])');
+    await page.click('#analyze');
+    await page.waitForFunction(() => /^(Gotowe|Błąd)/.test(document.getElementById('analyze-status').textContent), null, { timeout: 60000 });
+    const st3 = await page.textContent('#analyze-status');
+    check(st3.startsWith('Gotowe'), `video without stored length analysed: "${st3.slice(0, 50)}…"`);
+    await page.fill('#query', 'zielony');
+    await page.click('#search');
+    await page.waitForFunction(() => !document.getElementById('search').disabled);
+    const g = await page.textContent('#results li .time');
+    check(/^▶ 0:0[3-5]/.test(g), `colour change without brightness change detected (green at ${g})`);
   }
   await ctx.close();
 }

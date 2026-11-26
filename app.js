@@ -1,4 +1,4 @@
-import { translatePlToEn } from './translate.js';
+import { translatePlToEn, unknownWords } from './translate.js';
 import { MODELS, DEFAULT_MODEL } from './models.js';
 import { APP_VERSION } from './version.js';
 
@@ -296,6 +296,27 @@ async function seek(video, t) {
   await p;
 }
 
+// Some files (screen recordings, messenger videos, some recorders) do not store their length.
+// Seeking far past the end makes the browser read the whole file and find it.
+async function videoDuration(v) {
+  if (Number.isFinite(v.duration) && v.duration > 0) return v.duration;
+  if (v.readyState < 1) await waitFor(v, 'loadedmetadata');
+  if (Number.isFinite(v.duration) && v.duration > 0) return v.duration;
+  els.analyzeStatus.textContent = 'Sprawdzam długość filmu…';
+  await new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); v.removeEventListener('durationchange', check); resolve(); };
+    const check = () => { if (Number.isFinite(v.duration)) done(); };
+    const timer = setTimeout(done, 15000);
+    v.addEventListener('durationchange', check);
+    v.currentTime = 1e9;
+  });
+  let d = v.duration;
+  if (!Number.isFinite(d) && v.seekable.length) d = v.seekable.end(v.seekable.length - 1);
+  v.currentTime = 0;
+  await waitFor(v, 'seeked', 5000);
+  return d;
+}
+
 // Square crops covering the whole frame (CLIP would otherwise centre-crop and cut off the sides).
 function cropRects(w, h) {
   const side = Math.min(w, h);
@@ -308,7 +329,14 @@ function cropRects(w, h) {
   return rects;
 }
 
+function setDot(mode) {
+  const dot = document.getElementById('analysis-dot');
+  dot.className = `dot${mode ? ' ' + mode : ''}`;
+  dot.title = mode === 'done' ? 'Film przeanalizowany, możesz szukać' : mode === 'busy' ? 'Trwa analiza filmu' : 'Film nie jest przeanalizowany';
+}
+
 function resetResults() {
+  setDot(null);
   state.frames = [];
   state.scores = null;
   els.results.innerHTML = '';
@@ -353,18 +381,21 @@ async function keepAwake() {
   try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
 }
 
-// Tiny grayscale copy of a frame, used for cheap motion detection.
+// Tiny colour copy of a frame (RGB), used for cheap motion detection. Colour, not just brightness:
+// e.g. red and green can have the same brightness, and a change between them must still count.
 function smallGray(ctx, video, R, w, h) {
   ctx.drawImage(video, R.x, R.y, R.w, R.h, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
-  const g = new Uint8Array(w * h);
-  for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+  const g = new Uint8Array(w * h * 3);
+  for (let i = 0, j = 0; j < g.length; i += 4, j += 3) { g[j] = d[i]; g[j + 1] = d[i + 1]; g[j + 2] = d[i + 2]; }
   return g;
 }
 function changedFraction(a, b) {
   let n = 0;
-  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 25) n++;
-  return n / a.length;
+  for (let i = 0; i < a.length; i += 3) {
+    if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])) > 30) n++;
+  }
+  return n / (a.length / 3);
 }
 const MOTION_MIN_CHANGE = 0.002; // >0.2% of pixels changed = something moved (a distant person is ~0.5%)
 const MOTION_MAX_GAP = 60;       // re-check with AI at least once a minute anyway (light changes etc.)
@@ -390,6 +421,7 @@ els.analyze.addEventListener('click', async () => {
   state.analyzing = true;
   state.stop = false;
   resetResults();
+  setDot('busy');
   setClip(null);
   if (roiEditing) setRoiEditing(false);
   els.analyze.textContent = '⏹ Zatrzymaj (wyniki z dotychczasowej części zostaną)';
@@ -403,8 +435,8 @@ els.analyze.addEventListener('click', async () => {
     const v = els.video;
     v.pause();
     if (v.readyState < 2) await waitFor(v, 'loadeddata');
-    const duration = v.duration;
-    if (!Number.isFinite(duration) || duration <= 0) throw new Error('Nieznana długość filmu');
+    const duration = await videoDuration(v);
+    if (!Number.isFinite(duration) || duration <= 0) throw new Error('Nieznana długość filmu. Ten plik nie podaje swojej długości. Spróbuj zapisać go ponownie (np. przez Galerię → Edytuj → Zapisz).');
     const W = v.videoWidth, H = v.videoHeight;
     const interval = parseFloat(els.interval.value);
     state.interval = interval;
@@ -474,8 +506,10 @@ els.analyze.addEventListener('click', async () => {
       + (motionOnly ? ` (AI obejrzało ${aiCount} z ruchem)` : '')
       + '. Teraz opisz, czego szukasz. Możesz szukać wiele razy.';
     setProgress(els.analyzeProgress, null);
+    setDot(state.frames.length ? 'done' : null);
   } catch (e) {
     console.error(e);
+    setDot(state.frames.length ? 'done' : null);
     els.analyzeStatus.textContent = `Błąd: ${e.message}`;
     setProgress(els.analyzeProgress, null);
   } finally {
@@ -604,6 +638,10 @@ function makeCanvas(w, h) {
 // ---------- search ----------
 els.query.addEventListener('input', () => {
   els.queryEn.value = translatePlToEn(els.query.value);
+  const unknown = unknownWords(els.query.value);
+  const warn = document.getElementById('query-unknown');
+  warn.hidden = unknown.length === 0;
+  warn.textContent = `Nie znam słów: ${unknown.join(', ')}. AI rozumie tylko angielski. Jeśli to polskie słowa, wpisz je po angielsku w polu poniżej.`;
   updateButtons();
 });
 els.queryEn.addEventListener('input', updateButtons);
