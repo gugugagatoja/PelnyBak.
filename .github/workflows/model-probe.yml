@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [claude/person-search-video-app-477dpd]
-    paths: [scripts/model-probe.mjs, .github/workflows/model-probe.yml]
+    paths: [scripts/model-probe.mjs, scripts/model-check.mjs, models.js, .github/workflows/model-probe.yml]
 
 permissions:
   contents: read
@@ -23,5 +23,8 @@ jobs:
         run: |
           mkdir -p /tmp/probe && cd /tmp/probe && npm init -y >/dev/null
           npm i @huggingface/transformers@3.7.6 --ignore-scripts --no-audit --no-fund
+      - name: Check the app's models on simple test frames
+        run: cp scripts/model-check.mjs models.js /tmp/probe/ && cd /tmp/probe && node model-check.mjs
       - name: Compare models
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.modified, 'scripts/model-probe.mjs')
         run: cp scripts/model-probe.mjs /tmp/probe/ && cd /tmp/probe && node model-probe.mjs
