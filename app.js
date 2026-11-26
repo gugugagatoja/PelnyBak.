@@ -23,7 +23,8 @@ const LOCAL = location.protocol === 'app:' || new URLSearchParams(location.searc
 async function registerServiceWorker() {
   if (LOCAL || !('serviceWorker' in navigator)) return;
   try {
-    await navigator.serviceWorker.register('sw.js');
+    const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+    reg.update().catch(() => {}); // look for a new version on every start
     // never wait forever: if the browser blocks service workers, just carry on without them
     const ready = await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(() => r(null), 5000))]);
     if (!ready) return;

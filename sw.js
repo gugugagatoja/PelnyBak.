@@ -1,7 +1,7 @@
 // Service worker: makes the app work offline.
 // - app files: fresh from the network when online, from the cache when offline
 // - AI runtime from cdn.jsdelivr.net: cached on first use (model weights are cached by Transformers.js itself)
-const VERSION = 'v12'; // bump together with APP_VERSION in version.js
+const VERSION = 'v13'; // bump together with APP_VERSION in version.js
 const APP_CACHE = `app-${VERSION}`;
 const CDN_CACHE = 'cdn-v1';
 const APP_FILES = [
@@ -14,7 +14,9 @@ const CDN_FILES = [LIB + 'transformers.min.js', LIB + 'ort-wasm-simd-threaded.js
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const app = await caches.open(APP_CACHE);
-    await app.addAll(APP_FILES);
+    // cache: 'reload' skips the browser's HTTP cache (GitHub Pages lets it keep files for 10 minutes),
+    // so a new version installs the new files, not stale copies
+    await app.addAll(APP_FILES.map((u) => new Request(u, { cache: 'reload' })));
     // best effort: pre-download the AI runtime so it is available offline
     const cdn = await caches.open(CDN_CACHE);
     await Promise.all(CDN_FILES.map(async (u) => {
@@ -56,7 +58,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(APP_CACHE);
       try {
-        const res = await fetch(req);
+        // 'no-cache': always ask the server whether the file changed (cheap if it did not)
+        const res = await fetch(req, { cache: 'no-cache' });
         if (res.ok) cache.put(req, res.clone());
         return res;
       } catch {
