@@ -156,6 +156,11 @@ const browser = await chromium.launch();
             async () => check(false, `area search result: ${await page.textContent('#results li .time')}`));
     if (shotDir) await page.screenshot({ path: path.join(shotDir, 'roi.png'), fullPage: true });
   }
+  // picking the same film again keeps the analysis (results stay)
+  await page.setInputFiles('#file', cctvPath);
+  check(/Wyniki analizy zostały zachowane/.test(await page.textContent('#analyze-status')), 'same film picked again keeps the analysis');
+  check(await page.getAttribute('#analysis-dot', 'class') === 'dot done', 'dot stays green after picking the same film');
+
   // going to the background pauses the analysis; coming back resumes it without losing frames
   await page.click('#roi-clear').catch(() => {});
   await page.evaluate(() => {

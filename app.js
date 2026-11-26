@@ -351,13 +351,23 @@ function updateButtons() {
   els.search.disabled = state.busy || state.frames.length === 0 || !els.queryEn.value.trim();
 }
 
+const sameFile = (a, b) => a && b && a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+
 els.file.addEventListener('change', () => {
   const file = els.file.files[0];
   if (!file) return;
+  els.file.value = ''; // so that picking the same file again is noticed (otherwise no 'change' event)
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.videoUrl = URL.createObjectURL(file);
   els.video.src = state.videoUrl;
   setClip(null);
+  // the same film picked again (e.g. after the phone took away access to it): keep the analysis
+  if (sameFile(file, state.file) && state.frames.length && !state.busy) {
+    state.file = file;
+    els.analyzeStatus.textContent = `Wczytano ponownie ten sam film (${file.name}). Wyniki analizy zostały zachowane.`;
+    return;
+  }
+  state.file = file;
   els.videoWrap.hidden = false;
   els.roiRow.hidden = false;
   els.intervalRow.hidden = false;
@@ -851,7 +861,14 @@ async function playFrom(t) {
       await reload();
       await attempt();
     } catch (e) {
-      els.analyzeStatus.textContent = `Nie udało się uruchomić filmu (${e.message}). Przewiń go ręcznie do ${fmtTime(t)}.`;
+      // can the file still be read at all? Android may take away access to a picked file
+      let readable = true;
+      try { await state.file.slice(0, 1024).arrayBuffer(); } catch { readable = false; }
+      els.analyzeStatus.textContent = readable
+        ? `Nie udało się uruchomić filmu (${e.message}). Przewiń go ręcznie do ${fmtTime(t)}.`
+        : `Telefon odebrał aplikacji dostęp do pliku z filmem (zdarza się po przejściu w tło lub przy braku pamięci). `
+          + `Kliknij „Wybierz filmik” i wybierz ten sam film. Wyniki analizy zostaną zachowane, potem kliknij wynik jeszcze raz (${fmtTime(t)}).`;
+      els.analyzeStatus.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 }
