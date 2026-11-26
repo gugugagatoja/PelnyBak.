@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [claude/person-search-video-app-477dpd]
-    paths: [scripts/model-probe.mjs, scripts/model-check.mjs, models.js, .github/workflows/model-probe.yml]
+    paths: [scripts/model-probe.mjs, scripts/model-check.mjs, tests/browser-model-check.mjs, models.js, .github/workflows/model-probe.yml]
 
 permissions:
   contents: read
@@ -25,6 +25,20 @@ jobs:
           npm i @huggingface/transformers@3.7.6 --ignore-scripts --no-audit --no-fund
       - name: Check the app's models on simple test frames
         run: cp scripts/model-check.mjs models.js /tmp/probe/ && cd /tmp/probe && node model-check.mjs
+      - name: Check models inside a real browser (like the app)
+        run: |
+          cd desktop && npm ci && npx playwright install --with-deps chromium >/dev/null && cd ..
+          node tests/browser-model-check.mjs '[
+            {"id":"Xenova/clip-vit-base-patch32","family":"clip","dtype":"q8"},
+            {"id":"Xenova/clip-vit-base-patch16","family":"clip","dtype":"q8"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","dtype":"q8"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","dtype":"uint8"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","dtype":"int8"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","dtype":"q4"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","dtype":"fp16"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","text":"q8","vision":"fp32"},
+            {"id":"Xenova/siglip-base-patch16-224","family":"siglip","text":"fp32","vision":"q8"}
+          ]'
       - name: Compare models
         if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.modified, 'scripts/model-probe.mjs')
         run: cp scripts/model-probe.mjs /tmp/probe/ && cd /tmp/probe && node model-probe.mjs
