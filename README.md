@@ -2,7 +2,18 @@
 
 Aplikacja na telefon: wgrywasz filmik, opisujesz słowami, czego szukasz (np. *„osoba w czerwonej czapce, która odchodzi”*), a aplikacja pokazuje momenty filmu, które najlepiej pasują do opisu.
 
-**Wszystko działa na telefonie, offline.** Film nigdzie nie jest wysyłany. Za pierwszym razem aplikacja pobiera model AI (ok. 90 MB), potem działa bez internetu.
+**Wszystko działa na telefonie, offline.** Film nigdzie nie jest wysyłany. Za pierwszym razem aplikacja pobiera model AI (ok. 150 MB), potem działa bez internetu.
+
+## Modele AI
+
+W ramce „Model AI” możesz wybrać:
+
+| Model | Rozmiar | Szybkość | Kiedy |
+|---|---|---|---|
+| **Szybki** (CLIP ViT-B/32) | ok. 150 MB | najszybszy | długie nagrania, telefon |
+| **Dokładny** (SigLIP base) | ok. 200 MB | ok. 2× wolniejszy | szczegóły, małe przedmioty, krótsze fragmenty |
+
+Dokładny model wybrano automatycznym porównaniem (`scripts/model-probe.mjs`, workflow „Porównanie modeli AI”). Zmiana modelu wymaga ponownej analizy filmu.
 
 ## Jak to działa
 
@@ -38,7 +49,9 @@ Strona jest publikowana z tej gałęzi (Settings → Pages → Deploy from a bra
 
 Program z wbudowanym modelem AI. Nie trzeba go instalować ani łączyć z internetem.
 
-1. Pobierz **Szukaj-w-filmie-Windows.zip** z zakładki **Releases** (wydanie „program-windows”).
+1. Pobierz jedną z wersji z zakładki **Releases** (wydanie „program-windows”):
+   - **Szukaj-w-filmie-Windows-lekki.zip**: tylko szybki model AI (mniejszy plik),
+   - **Szukaj-w-filmie-Windows-pelny.zip**: szybki i dokładny model AI.
 2. Rozpakuj go w dowolnym miejscu, np. na pendrive. Powstanie folder **Szukaj w filmie**.
 3. Uruchom **Szukaj w filmie.exe**. Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij **Więcej informacji → Uruchom mimo to**.
 
