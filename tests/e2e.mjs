@@ -156,6 +156,24 @@ const browser = await chromium.launch();
             async () => check(false, `area search result: ${await page.textContent('#results li .time')}`));
     if (shotDir) await page.screenshot({ path: path.join(shotDir, 'roi.png'), fullPage: true });
   }
+  // going to the background pauses the analysis; coming back resumes it without losing frames
+  await page.click('#roi-clear').catch(() => {});
+  await page.evaluate(() => {
+    window.__hidden = false;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hidden });
+  });
+  await page.click('#analyze');
+  await page.waitForFunction(() => /Analiza: 0:0[3-9]/.test(document.getElementById('analyze-status').textContent), null, { timeout: 30000 });
+  await page.evaluate(() => { window.__hidden = true; document.dispatchEvent(new Event('visibilitychange')); });
+  await page.waitForFunction(() => /Wstrzymano/.test(document.getElementById('analyze-status').textContent), null, { timeout: 10000 })
+    .then(() => check(true, 'analysis pauses in the background'), () => check(false, 'analysis pauses in the background'));
+  await page.waitForTimeout(1500);
+  check(/Wstrzymano/.test(await page.textContent('#analyze-status')), 'stays paused while in the background');
+  await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event('visibilitychange')); });
+  await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
+  const st4 = await page.textContent('#analyze-status');
+  check(/sprawdzono 20 klatek/.test(st4), `resumes and finishes all frames: "${st4.slice(0, 40)}…"`);
+
   // a file that does not store its length (screen recordings, messengers): must still be analysed
   if (process.env.NODUR_VIDEO) {
     await page.setInputFiles('#file', process.env.NODUR_VIDEO);

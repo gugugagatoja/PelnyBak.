@@ -376,6 +376,17 @@ els.file.addEventListener('change', () => {
   }, { once: true });
 });
 
+function waitUntilVisible(message) {
+  els.analyzeStatus.textContent = message;
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!document.hidden || state.stop) { document.removeEventListener('visibilitychange', check); resolve(); }
+    };
+    document.addEventListener('visibilitychange', check);
+    check();
+  });
+}
+
 // Keep the screen on during long analyses (otherwise the phone may sleep and pause the work).
 async function keepAwake() {
   try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
@@ -464,8 +475,19 @@ els.analyze.addEventListener('click', async () => {
     const times = [];
     for (let t = Math.min(0.1, duration / 2); t < duration; t += interval) times.push(t);
     const started = performance.now();
+    let pausedMs = 0;
     for (let i = 0; i < times.length && !state.stop; i++) {
+      // Android stops video decoding for apps in the background: wait until the app is visible again
+      if (document.hidden) {
+        const p0 = performance.now();
+        await waitUntilVisible(`⏸ Wstrzymano przy ${fmtTime(times[i])}, bo aplikacja była w tle. Wróć do niej, żeby kontynuować.`);
+        pausedMs += performance.now() - p0;
+        if (state.stop) break;
+        wakeLock = await keepAwake(); // the screen lock is released when the app is hidden
+        els.analyzeStatus.textContent = `▶ Wznowiono analizę od ${fmtTime(times[i])}…`;
+      }
       await seek(v, times[i]);
+      if (document.hidden) { i--; continue; } // went to background during the seek: redo this frame
       const gray = motionOnly ? smallGray(gctx, v, R, gw, gh) : null;
       const still = motionOnly && ref && times[i] - ref.t < MOTION_MAX_GAP && changedFraction(gray, ref.gray) < MOTION_MIN_CHANGE;
       if (still) {
@@ -490,7 +512,7 @@ els.analyze.addEventListener('click', async () => {
 
       const done = i + 1;
       {
-        const perFrame = (performance.now() - started) / done;
+        const perFrame = (performance.now() - started - pausedMs) / done;
         const left = Math.round(((times.length - done) * perFrame) / 1000);
         setProgress(els.analyzeProgress, done / times.length);
         els.analyzeStatus.textContent = `Analiza: ${fmtTime(times[i])} z ${fmtTime(duration)}`
