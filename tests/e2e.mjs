@@ -96,6 +96,33 @@ const browser = await chromium.launch();
     await page.click('#search');
     await page.waitForFunction(() => /0:(0[7-9]|1[0-2])/.test(document.querySelector('#results li .time')?.textContent || ''));
     check(true, `passer-by found: ${await page.textContent('#results li .time')}`);
+
+    // area of interest: only the right quarter of the frame; the red object reaches it at ~0:11
+    await page.click('#roi-edit');
+    await page.evaluate(() => document.getElementById('video').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await page.waitForTimeout(400);
+    const box = await page.evaluate(() => {
+      const v = document.getElementById('video'), b = v.getBoundingClientRect();
+      const s = Math.min(v.clientWidth / v.videoWidth, v.clientHeight / v.videoHeight);
+      const w = v.videoWidth * s, h = v.videoHeight * s;
+      return { x: b.left + (v.clientWidth - w) / 2, y: b.top + (v.clientHeight - h) / 2, w, h };
+    });
+    await page.mouse.move(box.x + box.w * 0.75, box.y + box.h * 0.02);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.w * 0.9, box.y + box.h * 0.5, { steps: 4 });
+    await page.mouse.move(box.x + box.w * 0.99, box.y + box.h * 0.98, { steps: 4 });
+    await page.mouse.up();
+    check(await page.isVisible('#roi-box'), 'rectangle drawn on the video');
+    await page.click('#roi-edit'); // Gotowe
+    await page.click('#analyze');
+    await page.waitForFunction(() => document.getElementById('analyze-status').textContent.startsWith('Gotowe'), null, { timeout: 60000 });
+    const st2 = await page.textContent('#analyze-status');
+    check(st2.includes('w zaznaczonym obszarze'), `analysis limited to the area: "${st2}"`);
+    await page.click('#search');
+    await page.waitForFunction(() => /^▶ 0:1[01]/.test(document.querySelector('#results li .time')?.textContent || ''), null, { timeout: 10000 })
+      .then(() => check(true, 'object found only when it enters the area (0:11)'),
+            async () => check(false, `area search result: ${await page.textContent('#results li .time')}`));
+    if (shotDir) await page.screenshot({ path: path.join(shotDir, 'roi.png'), fullPage: true });
   }
   await ctx.close();
 }

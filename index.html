@@ -33,7 +33,20 @@
         <input type="file" id="file" accept="video/*">
         <span>📁 Wybierz filmik</span>
       </label>
-      <video id="video" controls playsinline muted hidden></video>
+      <div class="video-wrap" id="video-wrap" hidden>
+        <video id="video" controls playsinline muted></video>
+        <div id="roi-layer" aria-label="Obszar wyszukiwania">
+          <div id="roi-box" hidden>
+            <span class="h" data-h="nw"></span><span class="h" data-h="ne"></span>
+            <span class="h" data-h="sw"></span><span class="h" data-h="se"></span>
+          </div>
+        </div>
+      </div>
+      <div class="roi-row" id="roi-row" hidden>
+        <button type="button" id="roi-edit">▭ Zaznacz obszar</button>
+        <button type="button" id="roi-clear" hidden>Cały kadr</button>
+      </div>
+      <p class="hint" id="roi-hint" hidden></p>
       <div class="row" id="interval-row" hidden>
         <label for="interval">Sprawdzaj klatkę co</label>
         <select id="interval">

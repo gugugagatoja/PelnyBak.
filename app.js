@@ -3,7 +3,8 @@ import { translatePlToEn } from './translate.js';
 const $ = (id) => document.getElementById(id);
 const els = {
   modelStatus: $('model-status'), modelProgress: $('model-progress'), modelHint: $('model-hint'),
-  file: $('file'), video: $('video'), intervalRow: $('interval-row'), interval: $('interval'),
+  file: $('file'), video: $('video'), videoWrap: $('video-wrap'),
+  roiLayer: $('roi-layer'), roiBox: $('roi-box'), roiRow: $('roi-row'), roiEdit: $('roi-edit'), roiClear: $('roi-clear'), roiHint: $('roi-hint'), intervalRow: $('interval-row'), interval: $('interval'),
   analyze: $('analyze'), motionOnly: $('motion-only'), analyzeProgress: $('analyze-progress'), analyzeStatus: $('analyze-status'),
   query: $('query'), queryEn: $('query-en'), search: $('search'),
   resultsCard: $('results-card'), results: $('results'), timeline: $('timeline'),
@@ -208,6 +209,7 @@ function resetResults() {
 }
 
 function updateButtons() {
+  els.roiEdit.disabled = els.roiClear.disabled = !!state.analyzing;
   els.analyze.disabled = (state.busy && !state.analyzing) || !state.videoUrl;
   els.search.disabled = state.busy || state.frames.length === 0 || !els.queryEn.value.trim();
 }
@@ -218,8 +220,11 @@ els.file.addEventListener('change', () => {
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.videoUrl = URL.createObjectURL(file);
   els.video.src = state.videoUrl;
-  els.video.hidden = false;
+  els.videoWrap.hidden = false;
+  els.roiRow.hidden = false;
   els.intervalRow.hidden = false;
+  setRoi(null, false);
+  setRoiEditing(false);
   els.analyzeStatus.textContent = `Wybrano: ${file.name}`;
   resetResults();
   els.video.addEventListener('loadedmetadata', () => {
@@ -229,6 +234,7 @@ els.file.addEventListener('change', () => {
       els.interval.value = d > 300 ? '2' : '1';
       els.analyzeStatus.textContent = `Wybrano: ${file.name} (${fmtTime(d)})`;
     }
+    renderRoi();
   }, { once: true });
 });
 
@@ -238,8 +244,8 @@ async function keepAwake() {
 }
 
 // Tiny grayscale copy of a frame, used for cheap motion detection.
-function smallGray(ctx, video, w, h) {
-  ctx.drawImage(video, 0, 0, w, h);
+function smallGray(ctx, video, R, w, h) {
+  ctx.drawImage(video, R.x, R.y, R.w, R.h, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const g = new Uint8Array(w * h);
   for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
@@ -260,6 +266,7 @@ els.analyze.addEventListener('click', async () => {
   state.analyzing = true;
   state.stop = false;
   resetResults();
+  if (roiEditing) setRoiEditing(false);
   els.analyze.textContent = '⏹ Zatrzymaj (wyniki z dotychczasowej części zostaną)';
   updateButtons();
   let wakeLock = null;
@@ -283,9 +290,15 @@ els.analyze.addEventListener('click', async () => {
     const thumbCanvas = document.createElement('canvas');
     thumbCanvas.width = thumbW; thumbCanvas.height = thumbH;
     const tctx = thumbCanvas.getContext('2d');
-    const rects = cropRects(W, H);
+    // area to search: the marked rectangle (in video pixels) or the whole frame
+    const roi = state.roi;
+    const R = roi
+      ? { x: Math.round(roi.x * W), y: Math.round(roi.y * H), w: Math.max(8, Math.round(roi.w * W)), h: Math.max(8, Math.round(roi.h * H)) }
+      : { x: 0, y: 0, w: W, h: H };
+    const rects = cropRects(R.w, R.h).map(([sx, sy, sw, sh]) => [R.x + sx, R.y + sy, sw, sh]);
     const motionOnly = els.motionOnly.checked;
-    const gw = 64, gh = Math.max(8, Math.round(64 * H / W));
+    const gw = R.w >= R.h ? 64 : Math.max(8, Math.round(64 * R.w / R.h));
+    const gh = R.w >= R.h ? Math.max(8, Math.round(64 * R.h / R.w)) : 64;
     const gctx = makeCanvas(gw, gh).getContext('2d', { willReadFrequently: true });
     let ref = null; // last frame checked by AI: {gray, crops, thumb, t}
     let aiCount = 0;
@@ -295,7 +308,7 @@ els.analyze.addEventListener('click', async () => {
     const started = performance.now();
     for (let i = 0; i < times.length && !state.stop; i++) {
       await seek(v, times[i]);
-      const gray = motionOnly ? smallGray(gctx, v, gw, gh) : null;
+      const gray = motionOnly ? smallGray(gctx, v, R, gw, gh) : null;
       const still = motionOnly && ref && times[i] - ref.t < MOTION_MAX_GAP && changedFraction(gray, ref.gray) < MOTION_MIN_CHANGE;
       if (still) {
         // nothing changed since the last AI check: the scene is the same, reuse its result
@@ -307,6 +320,10 @@ els.analyze.addEventListener('click', async () => {
           crops.push(await engine.embedImage(cctx.getImageData(0, 0, CROP, CROP)));
         }
         tctx.drawImage(v, 0, 0, thumbW, thumbH);
+        if (roi) {
+          tctx.strokeStyle = '#ffd33d'; tctx.lineWidth = 2;
+          tctx.strokeRect(roi.x * thumbW, roi.y * thumbH, roi.w * thumbW, roi.h * thumbH);
+        }
         const thumb = thumbCanvas.toDataURL('image/jpeg', 0.6);
         state.frames.push({ t: times[i], crops, thumb });
         ref = { gray, crops, thumb, t: times[i] };
@@ -327,6 +344,7 @@ els.analyze.addEventListener('click', async () => {
     const analysed = state.frames.length ? fmtTime(state.frames[state.frames.length - 1].t) : '0:00';
     els.analyzeStatus.textContent = (state.stop ? `Zatrzymano na ${analysed}. ` : 'Gotowe: ')
       + `sprawdzono ${state.frames.length} klatek`
+      + (roi ? ' w zaznaczonym obszarze' : '')
       + (motionOnly ? ` (AI obejrzało ${aiCount} z ruchem)` : '')
       + '. Teraz opisz, czego szukasz. Możesz szukać wiele razy.';
     setProgress(els.analyzeProgress, null);
@@ -342,6 +360,114 @@ els.analyze.addEventListener('click', async () => {
     updateButtons();
   }
 });
+
+// ---------- area of interest (rectangle drawn on the video) ----------
+// state.roi = null (whole frame) or {x, y, w, h} as fractions of the video frame (0..1).
+state.roi = null;
+let roiEditing = false;
+
+// where the picture actually is inside the <video> element (it is letterboxed)
+function contentRect() {
+  const v = els.video, cw = v.clientWidth, ch = v.clientHeight;
+  const vw = v.videoWidth || 16, vh = v.videoHeight || 9;
+  const scale = Math.min(cw / vw, ch / vh);
+  const w = vw * scale, h = vh * scale;
+  return { left: (cw - w) / 2, top: (ch - h) / 2, width: w, height: h };
+}
+
+function renderRoi() {
+  const r = state.roi;
+  els.roiBox.hidden = !r;
+  if (r) {
+    const c = contentRect();
+    Object.assign(els.roiBox.style, {
+      left: `${c.left + r.x * c.width}px`, top: `${c.top + r.y * c.height}px`,
+      width: `${r.w * c.width}px`, height: `${r.h * c.height}px`,
+    });
+  }
+  els.roiClear.hidden = !r;
+  els.roiHint.hidden = !(r || roiEditing);
+  els.roiHint.textContent = roiEditing
+    ? (r ? 'Przesuń prostokąt palcem albo rozciągnij go za żółte kółka. Możesz też narysować nowy. Potem kliknij „Gotowe”.'
+         : 'Narysuj palcem prostokąt na filmie w miejscu, gdzie chcesz szukać.')
+    : 'AI szuka tylko w zaznaczonym obszarze. Ruch poza nim jest pomijany.';
+}
+
+function setRoi(roi, changedByUser = true) {
+  state.roi = roi;
+  renderRoi();
+  if (changedByUser && state.frames.length) {
+    resetResults();
+    els.analyzeStatus.textContent = 'Obszar zmieniony. Kliknij „Przeanalizuj film” jeszcze raz.';
+  }
+}
+
+function setRoiEditing(on) {
+  roiEditing = on;
+  els.roiLayer.classList.toggle('editing', on);
+  els.roiEdit.classList.toggle('active', on);
+  els.roiEdit.textContent = on ? '✔ Gotowe' : (state.roi ? '▭ Zmień obszar' : '▭ Zaznacz obszar');
+  if (on) els.video.pause();
+  renderRoi();
+}
+
+els.roiEdit.addEventListener('click', () => {
+  if (state.analyzing) return;
+  setRoiEditing(!roiEditing);
+});
+els.roiClear.addEventListener('click', () => {
+  if (state.analyzing) return;
+  setRoi(null);
+  setRoiEditing(false);
+});
+window.addEventListener('resize', renderRoi);
+
+{
+  let drag = null; // {mode, start: {x,y}, roi}
+  const MIN = 0.04;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const point = (e) => {
+    const c = contentRect(), b = els.roiLayer.getBoundingClientRect();
+    return { x: clamp((e.clientX - b.left - c.left) / c.width, 0, 1), y: clamp((e.clientY - b.top - c.top) / c.height, 0, 1) };
+  };
+  els.roiLayer.addEventListener('pointerdown', (e) => {
+    if (!roiEditing) return;
+    e.preventDefault();
+    els.roiLayer.setPointerCapture(e.pointerId);
+    const p = point(e);
+    const handle = e.target.dataset?.h;
+    if (handle && state.roi) drag = { mode: handle, start: p, roi: { ...state.roi } };
+    else if (state.roi && els.roiBox.contains(e.target)) drag = { mode: 'move', start: p, roi: { ...state.roi } };
+    else drag = { mode: 'draw', start: p, roi: null };
+  });
+  els.roiLayer.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const p = point(e), s = drag.start, r = drag.roi;
+    let n;
+    if (drag.mode === 'draw') {
+      n = { x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) };
+    } else if (drag.mode === 'move') {
+      n = { ...r, x: clamp(r.x + p.x - s.x, 0, 1 - r.w), y: clamp(r.y + p.y - s.y, 0, 1 - r.h) };
+    } else {
+      let x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+      if (drag.mode.includes('w')) x0 = Math.min(p.x, x1 - MIN);
+      if (drag.mode.includes('e')) x1 = Math.max(p.x, x0 + MIN);
+      if (drag.mode.includes('n')) y0 = Math.min(p.y, y1 - MIN);
+      if (drag.mode.includes('s')) y1 = Math.max(p.y, y0 + MIN);
+      n = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    state.roi = n;
+    renderRoi();
+  });
+  const end = () => {
+    if (!drag) return;
+    drag = null;
+    const r = state.roi;
+    setRoi(r && r.w >= MIN && r.h >= MIN ? r : null); // a tap without dragging does not leave a tiny box
+  };
+  els.roiLayer.addEventListener('pointerup', end);
+  els.roiLayer.addEventListener('pointercancel', end);
+}
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
