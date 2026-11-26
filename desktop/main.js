@@ -3,6 +3,8 @@
 // app:// protocol. Every request to the internet is blocked, so nothing can leave the computer.
 const { app, BrowserWindow, protocol, net, session, shell } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 
 const ROOT = path.join(__dirname, 'app');
@@ -12,6 +14,44 @@ const TYPES = {
   '.onnx': 'application/octet-stream', '.png': 'image/png', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json',
 };
+
+// No traces on disk: everything the built-in browser writes (settings, caches, GPU cache, logs,
+// crash reports) goes to a temporary folder that is deleted when the program closes.
+// Leftovers from a run that did not close cleanly (power cut, crash) are removed on the next start.
+const TEMP_PREFIX = 'szukaj-w-filmie-';
+function removeDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {}
+}
+for (const name of fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith(TEMP_PREFIX))) {
+  removeDir(path.join(os.tmpdir(), name)); // a folder still used by another running copy is locked and stays
+}
+const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_PREFIX));
+for (const name of ['userData', 'sessionData', 'logs', 'crashDumps']) app.setPath(name, path.join(TEMP_DIR, name));
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+app.commandLine.appendSwitch('disk-cache-size', '1');
+// On quit, start a tiny detached cleaner (this same executable in Node mode) that waits until the
+// program has fully exited and released its files, then deletes the temporary folder.
+let cleanerStarted = false;
+function startCleaner() {
+  if (cleanerStarted) return;
+  cleanerStarted = true;
+  const script = `
+    const fs = require('fs');
+    const [dir, pid] = [process.argv[1], Number(process.argv[2])];
+    const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const started = Date.now();
+    (function tick() {
+      if (alive() && Date.now() - started < 60000) return setTimeout(tick, 300);
+      try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 }); } catch {}
+    })();`;
+  try {
+    require('node:child_process').spawn(process.execPath, ['-e', script, TEMP_DIR, String(process.pid)], {
+      detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    }).unref();
+  } catch {}
+}
+app.on('will-quit', startCleaner);
+process.on('exit', () => removeDir(TEMP_DIR)); // best effort; the cleaner finishes the job
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'app',

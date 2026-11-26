@@ -19,6 +19,7 @@ SZUKAJ W FILMIE - program offline
 
 Program działa bez internetu i blokuje wszelkie połączenia z siecią.
 Model AI jest w folderze programu. Twoje filmy nigdzie nie są wysyłane.
+Po zamknięciu programu jego pliki tymczasowe są kasowane. Wyniki analizy nie są zapisywane na dysku.
 TXT
 sed -i 's/$/\r/' "Szukaj w filmie/CZYTAJ MNIE.txt"   # Windows line endings for Notepad
 zip -qr -9 Szukaj-w-filmie-Windows.zip "Szukaj w filmie"

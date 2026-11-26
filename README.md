@@ -42,7 +42,7 @@ Program z wbudowanym modelem AI. Nie trzeba go instalować ani łączyć z inter
 2. Rozpakuj go w dowolnym miejscu, np. na pendrive. Powstanie folder **Szukaj w filmie**.
 3. Uruchom **Szukaj w filmie.exe**. Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij **Więcej informacji → Uruchom mimo to**.
 
-Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać wysłane. Plik ZIP buduje automatycznie workflow **Program dla Windows**, który przed budową testuje aplikację z prawdziwym modelem AI.
+Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać wysłane. Wszystko, co zapisuje wbudowana przeglądarka, trafia do folderu tymczasowego, który jest kasowany po zamknięciu programu (pozostałości po awarii są usuwane przy następnym uruchomieniu). Wyniki analizy są trzymane tylko w pamięci RAM. Plik ZIP buduje automatycznie workflow **Program dla Windows**, który przed budową testuje aplikację z prawdziwym modelem AI.
 
 ## Pliki
 

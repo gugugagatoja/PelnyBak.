@@ -4,6 +4,8 @@
 //  - always: window opens, app loads over app://, AI library loads from vendor/, internet is blocked
 //  - with --expect-model: the real CLIP model loads, analyses the video and finds the red part
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -18,6 +20,10 @@ const shot = args.includes('--screenshot') ? args[args.indexOf('--screenshot') +
 let failures = 0;
 const check = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
 
+const tempDirs = () => fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('szukaj-w-filmie-'));
+const configDirs = () => ['Szukaj w filmie', 'szukaj-w-filmie'].flatMap((n) =>
+  [path.join(os.homedir(), '.config', n), path.join(process.env.APPDATA || '', n)]).filter((d) => fs.existsSync(d));
+const configBefore = configDirs();
 const app = await electron.launch({
   args: [path.join(root, 'desktop'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
 });
@@ -60,6 +66,13 @@ if (expectModel) {
     'model is looked up inside the app folder (not on the internet)');
 }
 if (shot) await page.screenshot({ path: shot });
+const during = tempDirs();
+check(during.length > 0, `browser data goes to a temporary folder (${during.join(', ')})`);
 await app.close();
+await new Promise((r) => setTimeout(r, 1500));
+const left = tempDirs().filter((d) => during.includes(d));
+check(left.length === 0, `temporary folder deleted after closing${left.length ? ': ' + left.join(', ') : ''}`);
+const newConfig = configDirs().filter((d) => !configBefore.includes(d));
+check(newConfig.length === 0, `nothing written to the user profile${newConfig.length ? ': ' + newConfig.join(', ') : ''}`);
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
 process.exit(failures ? 1 : 0);
