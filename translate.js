@@ -55,6 +55,12 @@ const DICT = [
   ['pod', 'under'], ['przy', 'near'], ['obok', 'next to'], ['przed', 'in front of'], ['za', 'behind'],
   ['do', 'to'], ['od', 'from'], ['po', 'on'], ['przez', 'through'], ['nad', 'above'], ['bez', 'without'],
   ['ktora', ''], ['ktory', ''], ['ktore', ''], ['ktorzy', ''], ['jest', ''], ['sa', ''], ['sie', ''],
+  // command words and question words: the AI only needs WHAT to look for, so they are dropped
+  ['znajd', ''], ['znalez', ''], ['szuka', ''], ['wyszuka', ''], ['sprawd', ''], ['pokaz', ''], ['zobacz', ''],
+  ['zaznacz', ''], ['pojawi', ''], ['pojawil', ''], ['wystepuj', ''], ['widac', ''], ['widoczn', ''],
+  ['miejsc', ''], ['obszar', ''], ['okienk', ''], ['prostok', ''], ['kadrze', ''], ['filmie', ''], ['nagrani', ''],
+  ['czy', ''], ['kiedy', ''], ['gdzie', ''], ['tu', ''], ['tutaj', ''], ['tam', ''], ['tym', ''], ['tej', ''],
+  ['byl', ''], ['byla', ''], ['bylo', ''], ['byly', ''], ['byli', ''], ['moment', ''], ['prosze', ''],
   ['ktos', 'someone'], ['jakis', 'a'], ['jakas', 'a'], ['jakies', 'some'], ['ten', 'the'], ['ta', 'the'], ['to', ''],
 ];
 
@@ -85,9 +91,18 @@ export function translatePlToEn(text) {
     if (/^\s+$/.test(token)) { out.push(' '); continue; }
     if (/^[,.;:!?()]+$/.test(token)) { out.push(token); continue; }
     const en = translateWord(token);
-    if (en) out.push(en);
+    out.push(en || null); // null = dropped word
   }
-  return out.join('')
+  // a preposition directly before a dropped word ("w [tym] [miejscu]") is dropped too
+  const SMALL = new Set(['in', 'on', 'at', 'to', 'from', 'with', 'near', 'the', 'a']);
+  for (let i = out.length - 1; i >= 0; i--) {
+    if (out[i] === null) {
+      let j = i - 1;
+      while (j >= 0 && out[j] === ' ') j--;
+      if (j >= 0 && SMALL.has(out[j])) out[j] = null;
+    }
+  }
+  return out.filter((t) => t !== null).join('')
     .replace(/\s+([,.;:!?])/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .replace(/,\s*,/g, ',')
