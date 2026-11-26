@@ -36,6 +36,9 @@ jobs:
             -f lavfi -i color=green:s=640x360:d=4 -filter_complex "[0][1][2]concat=n=3:v=1[v]" -map "[v]" test.webm
       - name: Run the desktop app with the real model
         run: xvfb-run -a node tests/electron-smoke.mjs test.webm --expect-model --screenshot screenshot.png
+      - name: Test the web version (real model download, then offline)
+        working-directory: desktop
+        run: npx playwright install --with-deps chromium && cd .. && node tests/web-real.mjs test.webm
       - name: Build portable Windows program (.zip)
         run: bash scripts/package-windows.sh
       - name: Publish release

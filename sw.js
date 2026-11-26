@@ -1,7 +1,7 @@
 // Service worker: makes the app work offline.
-// - app files: served from cache, refreshed in the background when online
+// - app files: fresh from the network when online, from the cache when offline
 // - AI runtime from cdn.jsdelivr.net: cached on first use (model weights are cached by Transformers.js itself)
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP_CACHE = `app-${VERSION}`;
 const CDN_CACHE = 'cdn-v1';
 const APP_FILES = [
@@ -52,15 +52,17 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === self.location.origin) {
+    // network first, so updates arrive right away; cached copy when offline
     event.respondWith((async () => {
       const cache = await caches.open(APP_CACHE);
-      const hit = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req).then((res) => {
+      try {
+        const res = await fetch(req);
         if (res.ok) cache.put(req, res.clone());
         return res;
-      }).catch(() => null);
-      if (hit) { event.waitUntil(network); return hit; }
-      return (await network) || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());
+      } catch {
+        return (await cache.match(req, { ignoreSearch: true }))
+          || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());
+      }
     })());
   }
 });

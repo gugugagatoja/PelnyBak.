@@ -18,7 +18,9 @@ async function registerServiceWorker() {
   if (LOCAL || !('serviceWorker' in navigator)) return;
   try {
     await navigator.serviceWorker.register('sw.js');
-    await navigator.serviceWorker.ready;
+    // never wait forever: if the browser blocks service workers, just carry on without them
+    const ready = await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(() => r(null), 5000))]);
+    if (!ready) return;
     if (!navigator.serviceWorker.controller) {
       // first visit: wait (briefly) until the SW controls the page so model/runtime downloads get cached
       await new Promise((res) => {
@@ -63,6 +65,15 @@ function createWorkerEngine() {
   });
 
   return {
+    // stop everything (e.g. after a broken download) so the next load starts clean;
+    // files that finished downloading stay in the browser cache and are not fetched again
+    reset() {
+      if (worker) worker.terminate();
+      worker = null;
+      readyPromise = null;
+      for (const p of pending.values()) p.reject(new Error('przerwano'));
+      pending.clear();
+    },
     load(progressCb) {
       if (progressCb) onProgress = progressCb;
       if (!readyPromise) {
@@ -113,16 +124,30 @@ async function ensureModel() {
   els.modelStatus.textContent = 'wczytywanie…';
   els.modelStatus.classList.remove('ok');
   setProgress(els.modelProgress, 0);
+  const ATTEMPTS = LOCAL ? 1 : 5;
+  await swReady; // let the service worker control the page first, so downloads get cached for offline use
   try {
-    await engine.load((loaded, total) => {
-      setProgress(els.modelProgress, loaded / total);
-      els.modelHint.textContent = `Pobieranie modelu: ${fmtMB(loaded)} z ${fmtMB(total)}…`;
-    });
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await engine.load((loaded, total) => {
+          setProgress(els.modelProgress, loaded / total);
+          els.modelHint.textContent = `Pobieranie modelu: ${fmtMB(loaded)} z ${fmtMB(total)}…`
+            + (attempt > 1 ? ` (próba ${attempt} z ${ATTEMPTS})` : '');
+        });
+        break;
+      } catch (e) {
+        if (attempt >= ATTEMPTS) throw e;
+        console.warn('Model download failed, retrying:', e);
+        engine.reset?.();
+        els.modelHint.textContent = `Połączenie przerwane (${e.message}). Ponawiam za chwilę… (próba ${attempt + 1} z ${ATTEMPTS})`;
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
   } catch (e) {
     els.modelStatus.textContent = 'błąd';
     els.modelHint.textContent = `Nie udało się wczytać modelu (${e.message}). ` + (LOCAL
       ? 'Brakuje plików modelu w folderze programu. Pobierz i rozpakuj program jeszcze raz.'
-      : 'Za pierwszym razem potrzebny jest internet.');
+      : 'Za pierwszym razem potrzebny jest internet. Najlepiej połącz się z Wi-Fi i kliknij „Przeanalizuj film” jeszcze raz. Już pobrane części modelu zostaną zachowane.');
     setProgress(els.modelProgress, null);
     throw e;
   }
@@ -486,8 +511,9 @@ els.timeline.addEventListener('click', (e) => {
 });
 
 // ---------- start ----------
+const swReady = registerServiceWorker();
 (async () => {
-  await registerServiceWorker();
+  await swReady;
   if (LOCAL) {
     els.modelHint.textContent = 'Model jest wbudowany w program. Nic nie jest pobierane ani wysyłane.';
     ensureModel().catch(() => {});
