@@ -57,11 +57,19 @@ function createWorkerEngine() {
       pending.clear();
     };
   }
-  const call = (msg, transfer) => new Promise((resolve, reject) => {
+  // timeoutMs: give up if the AI does not answer (e.g. the phone killed the worker to free memory)
+  const call = (msg, transfer, timeoutMs = 0) => new Promise((resolve, reject) => {
     if (!worker) start();
     const id = msg.type === 'load' ? 'load' : nextId++;
     if (msg.type !== 'load') msg.id = id;
-    pending.set(id, { resolve, reject });
+    const timer = timeoutMs && setTimeout(() => {
+      pending.delete(id);
+      reject(Object.assign(new Error('AI nie odpowiada'), { timeout: true }));
+    }, timeoutMs);
+    pending.set(id, {
+      resolve: (v) => { clearTimeout(timer); resolve(v); },
+      reject: (e) => { clearTimeout(timer); reject(e); },
+    });
     worker.postMessage(msg, transfer || []);
   });
 
@@ -85,11 +93,11 @@ function createWorkerEngine() {
     },
     async embedImage(imageData) {
       const buffer = imageData.data.buffer.slice(0);
-      const r = await call({ type: 'image', width: imageData.width, height: imageData.height, buffer }, [buffer]);
+      const r = await call({ type: 'image', width: imageData.width, height: imageData.height, buffer }, [buffer], 60000);
       return r.emb;
     },
     async embedTexts(texts) {
-      const r = await call({ type: 'text', texts });
+      const r = await call({ type: 'text', texts }, null, 60000);
       return r.embs;
     },
   };
@@ -259,6 +267,20 @@ function changedFraction(a, b) {
 const MOTION_MIN_CHANGE = 0.002; // >0.2% of pixels changed = something moved (a distant person is ~0.5%)
 const MOTION_MAX_GAP = 60;       // re-check with AI at least once a minute anyway (light changes etc.)
 
+// One frame through the AI; if it stops answering, restart it (the model is cached) and try once more.
+async function embedWithRetry(imageData, t) {
+  try {
+    return await engine.embedImage(imageData);
+  } catch (e) {
+    if (!e.timeout && !/przerwano|Błąd modułu/.test(e.message)) throw e;
+    els.analyzeStatus.textContent = `AI przestało odpowiadać przy ${fmtTime(t)}. Uruchamiam je ponownie…`;
+    engine.reset?.();
+    state.modelReady = false;
+    await ensureModel();
+    return await engine.embedImage(imageData);
+  }
+}
+
 els.analyze.addEventListener('click', async () => {
   if (state.analyzing) { state.stop = true; els.analyze.textContent = 'Zatrzymywanie…'; return; }
   if (!state.videoUrl || state.busy) return;
@@ -317,7 +339,7 @@ els.analyze.addEventListener('click', async () => {
         const crops = [];
         for (const [sx, sy, sw, sh] of rects) {
           cctx.drawImage(v, sx, sy, sw, sh, 0, 0, CROP, CROP);
-          crops.push(await engine.embedImage(cctx.getImageData(0, 0, CROP, CROP)));
+          crops.push(await embedWithRetry(cctx.getImageData(0, 0, CROP, CROP), times[i]));
         }
         tctx.drawImage(v, 0, 0, thumbW, thumbH);
         if (roi) {
@@ -331,7 +353,7 @@ els.analyze.addEventListener('click', async () => {
       }
 
       const done = i + 1;
-      if (done % 5 === 0 || done === times.length) {
+      {
         const perFrame = (performance.now() - started) / done;
         const left = Math.round(((times.length - done) * perFrame) / 1000);
         setProgress(els.analyzeProgress, done / times.length);
