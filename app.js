@@ -266,10 +266,11 @@ els.analyze.addEventListener('click', async () => {
   try {
     wakeLock = await keepAwake();
     await ensureModel();
-    const v = document.createElement('video');
-    v.muted = true; v.playsInline = true; v.preload = 'auto';
-    v.src = state.videoUrl;
-    await waitFor(v, 'loadeddata');
+    // Use the visible player itself: phones have few video decoders, and a second hidden
+    // copy of the same video often fails to open ("Nie można odczytać filmu").
+    const v = els.video;
+    v.pause();
+    if (v.readyState < 2) await waitFor(v, 'loadeddata');
     const duration = v.duration;
     if (!Number.isFinite(duration) || duration <= 0) throw new Error('Nieznana długość filmu');
     const W = v.videoWidth, H = v.videoHeight;
@@ -322,7 +323,7 @@ els.analyze.addEventListener('click', async () => {
           + (done < times.length ? ` · zostało ok. ${fmtTime(left)}` : '');
       }
     }
-    v.removeAttribute('src'); v.load();
+    v.currentTime = 0;
     const analysed = state.frames.length ? fmtTime(state.frames[state.frames.length - 1].t) : '0:00';
     els.analyzeStatus.textContent = (state.stop ? `Zatrzymano na ${analysed}. ` : 'Gotowe: ')
       + `sprawdzono ${state.frames.length} klatek`
