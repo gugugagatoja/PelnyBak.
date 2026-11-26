@@ -1,7 +1,7 @@
 // Desktop (Windows) wrapper: shows the web app in its own window, fully offline.
 // The app, the AI runtime and the CLIP model all live in ./app and are served over a private
 // app:// protocol. Every request to the internet is blocked, so nothing can leave the computer.
-const { app, BrowserWindow, protocol, net, session, shell } = require('electron');
+const { app, BrowserWindow, protocol, net, session, shell, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -59,6 +59,29 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 
+// CPU and memory usage for the status bar: whole-computer CPU % (from CPU time counters),
+// memory used by all of this program's processes, and the computer's RAM.
+let prevCpu = os.cpus();
+ipcMain.handle('metrics', () => {
+  const cpus = os.cpus();
+  let idle = 0, total = 0;
+  cpus.forEach((c, i) => {
+    const p = prevCpu[i] || c;
+    const t = (k) => c.times[k] - p.times[k];
+    const sum = t('user') + t('nice') + t('sys') + t('idle') + t('irq');
+    idle += t('idle'); total += sum;
+  });
+  prevCpu = cpus;
+  const appMemKB = app.getAppMetrics().reduce((s, m) => s + (m.memory?.workingSetSize || 0), 0);
+  return {
+    cpuPercent: total > 0 ? Math.round(100 * (1 - idle / total)) : 0,
+    cores: cpus.length,
+    appMemMB: Math.round(appMemKB / 1024),
+    ramUsedGB: +((os.totalmem() - os.freemem()) / 2 ** 30).toFixed(1),
+    ramTotalGB: +(os.totalmem() / 2 ** 30).toFixed(1),
+  };
+});
+
 app.whenReady().then(() => {
   protocol.handle('app', async (req) => {
     const pathname = decodeURIComponent(new URL(req.url).pathname);
@@ -90,7 +113,7 @@ app.whenReady().then(() => {
     icon: path.join(ROOT, 'icons', 'icon-512.png'),
     autoHideMenuBar: true,
     backgroundColor: '#0f1216',
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);

@@ -111,3 +111,8 @@ video { width: 100%; max-height: 50vh; margin-top: 12px; border-radius: 10px; ba
 .model-choice small { display: block; color: var(--muted); font-size: 0.85rem; }
 .ver { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 10px; border-radius: 999px;
   font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; background: var(--accent); color: var(--accent-text); }
+.metrics { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; font-size: 0.8rem; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.metrics:empty { display: none; }
+.metrics b { color: var(--text); font-weight: 600; }
+.metrics .hot { color: #d1242f; }

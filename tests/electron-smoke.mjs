@@ -34,6 +34,9 @@ page.on('pageerror', (e) => { console.log('pageerror', e.message); failures++; }
 await page.waitForLoadState('domcontentloaded');
 check((await page.title()).startsWith('Szukaj w filmie'), `window shows the app (${await page.title()})`);
 
+await page.waitForFunction(() => /Procesor/.test(document.getElementById('metrics').textContent), null, { timeout: 10000 }).catch(() => {});
+const metrics = await page.textContent('#metrics');
+check(/Procesor: \d+% \(\d+ rdz\.\).*Pamięć programu: \d+ MB.*RAM: [\d,]+ \/ [\d,]+ GB/.test(metrics), `status bar shows CPU and memory: "${metrics}"`);
 const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true));
 check(blocked, 'internet access is blocked inside the app');
 check(await page.evaluate(() => crossOriginIsolated), 'multi-threaded AI available (cross-origin isolated)');

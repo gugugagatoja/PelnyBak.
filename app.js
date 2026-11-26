@@ -39,6 +39,45 @@ async function registerServiceWorker() {
   }
 }
 
+// ---------- CPU / memory status bar ----------
+// Time the AI spends working (a browser cannot read the CPU load, but the AI is almost all of the app's work).
+let aiBusyMs = 0;
+async function timed(fn) {
+  const start = performance.now();
+  try { return await fn(); } finally { aiBusyMs += performance.now() - start; }
+}
+function startMetrics() {
+  const box = document.getElementById('metrics');
+  let lastT = performance.now(), lastBusy = aiBusyMs;
+  const fmt = (label, value, hot) => `<span>${label}: <b${hot ? ' class="hot"' : ''}>${value}</b></span>`;
+  const tick = async () => {
+    if (document.hidden) return;
+    const now = performance.now();
+    const aiPct = Math.min(100, Math.round((100 * (aiBusyMs - lastBusy)) / (now - lastT || 1)));
+    lastT = now; lastBusy = aiBusyMs;
+    const parts = [];
+    if (window.desktop?.metrics) {
+      try {
+        const m = await window.desktop.metrics();
+        parts.push(fmt('Procesor', `${m.cpuPercent}% (${m.cores} rdz.)`, m.cpuPercent >= 90));
+        parts.push(fmt('Pamięć programu', `${m.appMemMB} MB`));
+        const gb = (x) => String(x).replace('.', ',');
+        parts.push(fmt('RAM', `${gb(m.ramUsedGB)} / ${gb(m.ramTotalGB)} GB`, m.ramUsedGB / m.ramTotalGB > 0.9));
+      } catch {}
+    } else {
+      parts.push(fmt('Praca AI', `${aiPct}% czasu`, aiPct >= 90));
+      const mem = performance.memory;
+      if (mem) parts.push(fmt('Pamięć aplikacji', `${Math.round(mem.usedJSHeapSize / 1048576)} MB`));
+      if (navigator.deviceMemory) parts.push(fmt('RAM urządzenia', `ok. ${navigator.deviceMemory} GB`));
+      if (navigator.hardwareConcurrency) parts.push(fmt('Rdzenie', navigator.hardwareConcurrency));
+    }
+    box.innerHTML = parts.join('');
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+startMetrics();
+
 // ---------- AI engine (Web Worker running CLIP) ----------
 function createWorkerEngine() {
   let worker = null;
@@ -99,11 +138,11 @@ function createWorkerEngine() {
     },
     async embedImage(imageData) {
       const buffer = imageData.data.buffer.slice(0);
-      const r = await call({ type: 'image', width: imageData.width, height: imageData.height, buffer }, [buffer], 60000);
+      const r = await timed(() => call({ type: 'image', width: imageData.width, height: imageData.height, buffer }, [buffer], 60000));
       return r.emb;
     },
     async embedTexts(texts) {
-      const r = await call({ type: 'text', texts }, null, 60000);
+      const r = await timed(() => call({ type: 'text', texts }, null, 60000));
       return r.embs;
     },
   };

@@ -87,6 +87,8 @@ const browser = await chromium.launch();
   await page.waitForFunction(() => document.getElementById('video').currentTime > 7, null, { timeout: 15000 })
     .then(() => check(true, 'result click recovers a released video player'),
           () => check(false, 'result click recovers a released video player'));
+  const metrics = await page.textContent('#metrics');
+  check(/Praca AI: \d+% czasu/.test(metrics), `status bar shows AI load: "${metrics}"`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, 'no horizontal scroll at phone width');
 
