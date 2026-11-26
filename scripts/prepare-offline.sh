@@ -7,7 +7,7 @@ OUT="$ROOT/desktop/app"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/vendor" "$OUT/models"
-cp -r "$ROOT"/{index.html,styles.css,app.js,worker.js,translate.js,models.js,manifest.webmanifest,icons} "$OUT/"
+cp -r "$ROOT"/{index.html,styles.css,app.js,worker.js,translate.js,models.js,version.js,manifest.webmanifest,icons} "$OUT/"
 
 # AI runtime: only the 3 browser files of the npm package are needed (no install scripts run)
 TMP="$(mktemp -d)"

@@ -32,7 +32,7 @@ const page = await app.firstWindow();
 page.on('console', (m) => { if (m.type() === 'error') console.log('  console:', m.text()); });
 page.on('pageerror', (e) => { console.log('pageerror', e.message); failures++; });
 await page.waitForLoadState('domcontentloaded');
-check((await page.title()) === 'Szukaj w filmie', 'window shows the app');
+check((await page.title()).startsWith('Szukaj w filmie'), `window shows the app (${await page.title()})`);
 
 const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true));
 check(blocked, 'internet access is blocked inside the app');

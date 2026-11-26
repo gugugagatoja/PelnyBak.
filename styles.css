@@ -109,3 +109,5 @@ video { width: 100%; max-height: 50vh; margin-top: 12px; border-radius: 10px; ba
 .model-choice label:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
 .model-choice input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
 .model-choice small { display: block; color: var(--muted); font-size: 0.85rem; }
+.ver { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 10px; border-radius: 999px;
+  font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; background: var(--accent); color: var(--accent-text); }

@@ -1,5 +1,9 @@
 import { translatePlToEn } from './translate.js';
 import { MODELS, DEFAULT_MODEL } from './models.js';
+import { APP_VERSION } from './version.js';
+
+document.getElementById('app-version').textContent = `v${APP_VERSION}`;
+document.title = `Szukaj w filmie v${APP_VERSION}`;
 
 const $ = (id) => document.getElementById(id);
 const els = {
