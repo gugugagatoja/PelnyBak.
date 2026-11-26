@@ -1,0 +1,27 @@
+# Compares candidate AI models for the "accurate" mode (load, size, speed, accuracy EN/PL).
+name: Porównanie modeli AI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/person-search-video-app-477dpd]
+    paths: [scripts/model-probe.mjs, .github/workflows/model-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Transformers.js (CPU only)
+        run: |
+          mkdir -p /tmp/probe && cd /tmp/probe && npm init -y >/dev/null
+          npm i @huggingface/transformers@3.7.6 --ignore-scripts --no-audit --no-fund
+      - name: Compare models
+        run: cp scripts/model-probe.mjs /tmp/probe/ && cd /tmp/probe && node model-probe.mjs
