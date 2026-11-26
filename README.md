@@ -39,7 +39,7 @@ Strona jest publikowana z tej gałęzi (Settings → Pages → Deploy from a bra
 Program z wbudowanym modelem AI. Nie trzeba go instalować ani łączyć z internetem.
 
 1. Pobierz **Szukaj-w-filmie-Windows.zip** z zakładki **Releases** (wydanie „program-windows”).
-2. Rozpakuj go w dowolnym miejscu, np. na pendrive.
+2. Rozpakuj go w dowolnym miejscu, np. na pendrive. Powstanie folder **Szukaj w filmie**.
 3. Uruchom **Szukaj w filmie.exe**. Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij **Więcej informacji → Uruchom mimo to**.
 
 Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać wysłane. Plik ZIP buduje automatycznie workflow **Program dla Windows**, który przed budową testuje aplikację z prawdziwym modelem AI.
@@ -55,6 +55,7 @@ Program blokuje wszelkie połączenia z internetem, więc nic nie może zostać 
 | `sw.js`, `manifest.webmanifest` | Instalacja i praca offline (PWA) |
 | `desktop/` | Program dla Windows (Electron) |
 | `scripts/prepare-offline.sh` | Przygotowuje aplikację z modelem do wersji offline |
+| `scripts/package-windows.sh` | Pakuje program dla Windows do pliku ZIP |
 | `tests/e2e.mjs` | Test w przeglądarce (Playwright) |
 | `tests/electron-smoke.mjs` | Test programu dla Windows |
 

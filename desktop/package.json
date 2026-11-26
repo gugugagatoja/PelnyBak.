@@ -9,7 +9,7 @@
   "scripts": {
     "prepare-app": "bash ../scripts/prepare-offline.sh",
     "start": "electron .",
-    "dist:win": "electron-builder --win zip --x64"
+    "dist:win": "bash ../scripts/package-windows.sh"
   },
   "devDependencies": {
     "electron": "33.2.1",
@@ -30,7 +30,8 @@
       "output": "dist"
     },
     "win": {
-      "icon": "app/icons/icon-512.png"
+      "icon": "app/icons/icon-512.png",
+      "signAndEditExecutable": false
     }
   }
 }
