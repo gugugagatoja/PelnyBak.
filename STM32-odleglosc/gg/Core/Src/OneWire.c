@@ -21,9 +21,10 @@ volatile uint16_t rc_buffer[5];
  */
 
 
-extern UART_HandleTypeDef huart6;
-#define ow_uart huart6
-#define OW_USART USART6
+/* 1-Wire przeniesione z USART6 (PC6) na USART1 (PA9) - USART6 obsluguje teraz HM-10 */
+extern UART_HandleTypeDef huart1;
+#define ow_uart huart1
+#define OW_USART USART1
 #define MAXDEVICES_ON_THE_BUS 2
 
 /*********************************************************************************************/
@@ -37,7 +38,7 @@ uint8_t sensor;
 Temperature t;
 
 
-char *crcOK;
+char *crcOK = "";
 
 uint8_t jj_Get_Temp(void)
 {
@@ -404,15 +405,14 @@ void owRecallE2Cmd(OneWire *ow, RomCode *rom) {
 int get_ROMid (void){
 	DEVInfo devInfo1;
 	if (owResetCmd() != ONEWIRE_NOBODY) {    // is anybody on the bus?
-		devices = owSearchCmd(&ow);        // получить ROMid в�?ех у�?трой�?т на шине или вернуть код ошибки
-		if (devices <= 0) {
-			while (1){
-				pDelay = 1000000;
-				for (i = 0; i < pDelay * 1; i++)    /* Wait a bit. */
-					__asm__("nop");
-			}
-
+		int znalezione = owSearchCmd(&ow);   // liczba czujnikow albo kod bledu (<0)
+		if (znalezione <= 0) {
+			/* Brak czujnikow: wczesniej tu byla nieskonczona petla (zawieszenie).
+			   Teraz pracujemy dalej bez temperatury. */
+			devices = 0;
+			return -1;
 		}
+		devices = (znalezione > MAXDEVICES_ON_THE_BUS) ? MAXDEVICES_ON_THE_BUS : (uint8_t) znalezione;
 		i = 0;
 		for (; i < devices; i++) {//выводим в кон�?оль в�?е найденные ROM
 			RomCode *r = &ow.ids[i];
@@ -434,7 +434,9 @@ int get_ROMid (void){
 	for (i = 0; i < pDelay * 1; i++)
 		__asm__("nop");
 
-	if (strcmp(crcOK,"CRC OK") == 0) return 0;
+	/* crcOK jest ustawiane tylko gdy ktos odpowiedzial na linii - wczesniej bez
+	   czujnikow byl tu NULL i strcmp powodowal HardFault */
+	if (crcOK != NULL && strcmp(crcOK,"CRC OK") == 0) return 0;
 	else return -1;
 }
 

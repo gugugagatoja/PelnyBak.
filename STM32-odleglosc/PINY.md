@@ -24,7 +24,16 @@ Na podstawie `gg.ioc` i kodu. „Nucleo”: Dx/Ax = złącze Arduino, CN7/CN10 =
 
 | Pin | Nucleo | Funkcja | Uwagi |
 |---|---|---|---|
-| PC6 | CN10-4 | 1-Wire, DS18B20 × 2 | USART6 jednoprzewodowo, rezystor 4,7 kΩ do 3,3 V |
+| **PA9** | D8 | 1-Wire, DS18B20 × 2 | USART1 jednoprzewodowo, rezystor 4,7 kΩ do 3,3 V (**wcześniej PC6**) |
+
+## Bluetooth – HM-10
+
+| Pin | Nucleo | Funkcja | Uwagi |
+|---|---|---|---|
+| PA11 | CN10-14 | USART6 TX → **RXD** HM-10 | 9600 bodów |
+| PA12 | CN10-12 | USART6 RX ← **TXD** HM-10 | |
+| PB12 | CN10-16 | **STATE** HM-10 | stan wysoki = telefon połączony |
+| 5V / GND | | VCC / GND HM-10 | płytka z konwerterem przyjmuje 3,6–6 V |
 
 ## Przyciski
 
@@ -48,9 +57,7 @@ Na podstawie `gg.ioc` i kodu. „Nucleo”: Dx/Ax = złącze Arduino, CN7/CN10 =
 | Pin | Nucleo | Ustawienie |
 |---|---|---|
 | PA6 | D12 | PWM TIM3 CH1 (timer służy tylko do odmierzania czasu) |
-| PA9 | D8 | UART1 TX jednoprzewodowo |
 | PA4 | A2 | wejście analogowe (ADC usunięte) |
-| PB12 | CN10-16 | wejście |
 | PB13 | CN10-30 | wyjście „INC” (potencjometr cyfrowy X9C?) |
 | PB14 | CN10-28 | wyjście „U/D” |
 | PC7 | D9 | wyjście, stan wysoki od startu |
@@ -62,7 +69,8 @@ HC-SR04 #1  TRIG ── PC0 (A5)      ECHO ── PB9 (D14)
 HC-SR04 #2  TRIG ── PC1 (A4)      ECHO ── PB6 (D10)
 LCD I2C     SDA  ── PB7 (CN7-21)  SCL  ── PB8 (D15)
 Brzęczyk         ── PA10 (D2)
-DS18B20 ×2  DATA ── PC6 (CN10-4) ──[4,7kΩ]── 3,3V
+DS18B20 ×2  DATA ── PA9 (D8) ──[4,7kΩ]── 3,3V
+HM-10       RXD ── PA11 (CN10-14)  TXD ── PA12 (CN10-12)  STATE ── PB12 (CN10-16)  VCC ── 5V
 Przycisk 1       ── PC4  → GND
 Przycisk 2       ── PB15 → GND
 Zasilanie HC-SR04 i LCD: 5V, wspólna masa
